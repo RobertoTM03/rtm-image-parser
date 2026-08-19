@@ -30,6 +30,8 @@ export interface ExtractionLogsTable {
   crosscheck_passed: boolean | null;
   processing_time_ms: number;
   status: string;
+  image_hash: string;
+  result_data: JSONColumnType<Record<string, unknown>> | null;
   created_at: ColumnType<Date, string | undefined, never>;
 }
 

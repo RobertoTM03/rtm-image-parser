@@ -34,6 +34,7 @@ function fakeLogRepo(): ExtractionLogRepositoryPort & { saved: unknown[] } {
       saved.push(log);
     },
     findRecent: async () => [],
+    findCachedResult: async () => null,
   };
 }
 
@@ -180,7 +181,45 @@ describe("ExtractionPipelineService", () => {
         confidence: 1,
         processingTimeMs: expect.any(Number),
         schemaVersion: 3,
+        cached: false,
       });
+    }
+  });
+
+  it("returns a cached result without calling any provider on a cache hit", async () => {
+    const provider1 = provider("azure-gpt-4o", vi.fn());
+    const logRepo = fakeLogRepo();
+    logRepo.findCachedResult = async () => ({
+      id: "log-1",
+      documentType: "ticket",
+      schemaVersion: 3,
+      modelsUsed: ["azure-gpt-4o"],
+      modelsDropped: [],
+      confidence: 1,
+      crosscheckPassed: null,
+      processingTimeMs: 500,
+      status: "ok",
+      imageHash: "abc123",
+      resultData: { merchant: "Acme", total: 100 },
+      createdAt: new Date(),
+    });
+
+    const pipeline = new ExtractionPipelineService(
+      [provider1],
+      new CrosscheckService(),
+      alwaysValid(),
+      logRepo,
+      baseConfig,
+    );
+
+    const result = await pipeline.execute({ imageBase64: "x", mimeType: "image/png", activeSchema: schema });
+
+    expect(provider1.extract).not.toHaveBeenCalled();
+    expect(logRepo.saved).toHaveLength(0);
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data).toEqual({ merchant: "Acme", total: 100 });
+      expect(result.metadata.cached).toBe(true);
     }
   });
 });

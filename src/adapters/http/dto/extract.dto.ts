@@ -15,6 +15,7 @@ export interface ExtractionMetadataDto {
   confidence: number;
   processingTimeMs: number;
   schemaVersion: number;
+  cached: boolean;
 }
 
 export function toMetadataDto(metadata: ExtractionMetadata): ExtractionMetadataDto {
@@ -24,6 +25,7 @@ export function toMetadataDto(metadata: ExtractionMetadata): ExtractionMetadataD
     confidence: metadata.confidence,
     processingTimeMs: metadata.processingTimeMs,
     schemaVersion: metadata.schemaVersion,
+    cached: metadata.cached,
   };
 }
 

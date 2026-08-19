@@ -124,10 +124,13 @@ field) or JSON:
 ```
 
 Input (mime type, size, and whether `document_type` has an active schema) is
-validated before any LLM is called.
+validated before any LLM is called. Before calling any model, the pipeline
+also checks for a previous **successful** result for the same image (sha256
+of the raw bytes) + `document_type` + active schema version; on a hit it
+returns that result directly (`metadata.cached: true`, no LLM calls made).
 
-**200 OK** — result accepted (single model, or multiple models that agreed
-above `CROSSCHECK_THRESHOLD`):
+**200 OK** — result accepted (single model, multiple models that agreed above
+`CROSSCHECK_THRESHOLD`, or a cache hit):
 
 ```json
 {
@@ -137,7 +140,8 @@ above `CROSSCHECK_THRESHOLD`):
     "modelsDropped": [],
     "confidence": 1,
     "processingTimeMs": 842,
-    "schemaVersion": 1
+    "schemaVersion": 1,
+    "cached": false
   }
 }
 ```
@@ -177,8 +181,6 @@ GET    /v1/schemas/:document_type/versions
 - **Authentication**: not implemented. `src/adapters/http/plugins/auth.placeholder.ts`
   is a no-op `preHandler` hook already wired into every route — a real auth
   check can be added there later without touching route definitions.
-- **Result caching by image hash**: not implemented; see the `TODO` in
-  `src/adapters/http/routes/extract.route.ts`.
 - **Visual schema form builder / schema import-export**: not implemented. The
   `SchemaTemplate`/`SchemaDefinition` data model does not need to change to
   add these later.

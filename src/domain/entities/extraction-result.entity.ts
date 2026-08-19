@@ -9,6 +9,8 @@ export interface ExtractionMetadata {
   confidence: number;
   processingTimeMs: number;
   schemaVersion: number;
+  /** True when this result was served from the image-hash cache without calling any LLM. */
+  cached: boolean;
 }
 
 export interface FieldMismatch {

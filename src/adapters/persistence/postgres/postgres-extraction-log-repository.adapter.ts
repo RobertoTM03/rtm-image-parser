@@ -13,6 +13,8 @@ interface LogRow {
   crosscheck_passed: boolean | null;
   processing_time_ms: number;
   status: string;
+  image_hash: string;
+  result_data: Record<string, unknown> | null;
   created_at: Date;
 }
 
@@ -27,6 +29,8 @@ function toRecord(row: LogRow): ExtractionLogRecord {
     crosscheckPassed: row.crosscheck_passed,
     processingTimeMs: row.processing_time_ms,
     status: row.status as ExtractionLog["status"],
+    imageHash: row.image_hash,
+    resultData: row.result_data,
     createdAt: row.created_at,
   };
 }
@@ -46,6 +50,8 @@ export class PostgresExtractionLogRepository implements ExtractionLogRepositoryP
         crosscheck_passed: log.crosscheckPassed,
         processing_time_ms: log.processingTimeMs,
         status: log.status,
+        image_hash: log.imageHash,
+        result_data: log.resultData === null ? null : JSON.stringify(log.resultData),
       })
       .execute();
   }
@@ -59,5 +65,24 @@ export class PostgresExtractionLogRepository implements ExtractionLogRepositoryP
       .execute();
 
     return rows.map((row) => toRecord(row as LogRow));
+  }
+
+  async findCachedResult(
+    imageHash: string,
+    documentType: string,
+    schemaVersion: number,
+  ): Promise<ExtractionLogRecord | null> {
+    const row = await this.db
+      .selectFrom("extraction_logs")
+      .selectAll()
+      .where("image_hash", "=", imageHash)
+      .where("document_type", "=", documentType)
+      .where("schema_version", "=", schemaVersion)
+      .where("status", "=", "ok")
+      .orderBy("created_at", "desc")
+      .limit(1)
+      .executeTakeFirst();
+
+    return row ? toRecord(row as LogRow) : null;
   }
 }

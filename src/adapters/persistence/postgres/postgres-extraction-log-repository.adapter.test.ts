@@ -37,6 +37,8 @@ describe("PostgresExtractionLogRepository", () => {
       crosscheckPassed: null,
       processingTimeMs: 1234,
       status: "ok",
+      imageHash: "hash-1",
+      resultData: { merchant: "Acme", total: 100 },
     });
 
     const rows = await sql<{
@@ -47,6 +49,8 @@ describe("PostgresExtractionLogRepository", () => {
       confidence: string;
       processing_time_ms: number;
       status: string;
+      image_hash: string;
+      result_data: Record<string, unknown>;
     }>`select * from extraction_logs`.execute(db);
 
     expect(rows.rows).toHaveLength(1);
@@ -58,5 +62,44 @@ describe("PostgresExtractionLogRepository", () => {
     expect(Number(row.confidence)).toBeCloseTo(0.95);
     expect(row.processing_time_ms).toBe(1234);
     expect(row.status).toBe("ok");
+    expect(row.image_hash).toBe("hash-1");
+    expect(row.result_data).toEqual({ merchant: "Acme", total: 100 });
+  });
+
+  it("finds the most recent successful result for a given image/document type/schema version", async () => {
+    if (!db) return;
+    const repo = new PostgresExtractionLogRepository(db);
+
+    await repo.save({
+      documentType: "ticket",
+      schemaVersion: 1,
+      modelsUsed: ["gemini-1.5-pro"],
+      modelsDropped: [],
+      confidence: 1,
+      crosscheckPassed: null,
+      processingTimeMs: 100,
+      status: "discordant",
+      imageHash: "hash-2",
+      resultData: null,
+    });
+    await repo.save({
+      documentType: "ticket",
+      schemaVersion: 1,
+      modelsUsed: ["gemini-1.5-pro"],
+      modelsDropped: [],
+      confidence: 1,
+      crosscheckPassed: null,
+      processingTimeMs: 100,
+      status: "ok",
+      imageHash: "hash-2",
+      resultData: { merchant: "Acme", total: 42 },
+    });
+
+    const hit = await repo.findCachedResult("hash-2", "ticket", 1);
+    expect(hit).not.toBeNull();
+    expect(hit!.resultData).toEqual({ merchant: "Acme", total: 42 });
+
+    const miss = await repo.findCachedResult("hash-2", "ticket", 2);
+    expect(miss).toBeNull();
   });
 });

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { LLMVisionProviderPort } from "../ports/llm-vision-provider.port";
 import type { ExtractionLogRepositoryPort } from "../ports/extraction-log-repository.port";
 import type { SchemaDefinition } from "../entities/schema-definition.entity";
@@ -37,6 +38,23 @@ export class ExtractionPipelineService {
   async execute(input: ExtractPipelineInput): Promise<ExtractionResult> {
     const startedAt = Date.now();
     const schema = input.activeSchema;
+    const imageHash = createHash("sha256").update(Buffer.from(input.imageBase64, "base64")).digest("hex");
+
+    const cached = await this.logRepo.findCachedResult(imageHash, schema.documentType, schema.version);
+    if (cached) {
+      return {
+        kind: "ok",
+        data: cached.resultData!,
+        metadata: {
+          modelsUsed: cached.modelsUsed,
+          modelsDropped: cached.modelsDropped,
+          confidence: cached.confidence ?? 1,
+          processingTimeMs: 0,
+          schemaVersion: cached.schemaVersion,
+          cached: true,
+        },
+      };
+    }
 
     const settled = await Promise.allSettled(
       this.providers.map((provider) => this.callWithRetry(provider, input, schema)),
@@ -69,6 +87,7 @@ export class ExtractionPipelineService {
         confidence: 1,
         processingTimeMs,
         schemaVersion: schema.version,
+        cached: false,
       };
 
       await this.logRepo.save({
@@ -80,6 +99,8 @@ export class ExtractionPipelineService {
         crosscheckPassed: null,
         processingTimeMs,
         status: "ok",
+        imageHash,
+        resultData: survivors[0]!.data,
       });
 
       return { kind: "ok", data: survivors[0]!.data, metadata };
@@ -99,6 +120,7 @@ export class ExtractionPipelineService {
       confidence: crosscheckResult.score,
       processingTimeMs,
       schemaVersion: schema.version,
+      cached: false,
     };
 
     if (!crosscheckResult.passed) {
@@ -111,6 +133,8 @@ export class ExtractionPipelineService {
         crosscheckPassed: false,
         processingTimeMs,
         status: "discordant",
+        imageHash,
+        resultData: null,
       });
 
       return { kind: "discordant", score: crosscheckResult.score, mismatches: crosscheckResult.mismatches, metadata };
@@ -125,6 +149,8 @@ export class ExtractionPipelineService {
       crosscheckPassed: true,
       processingTimeMs,
       status: "ok",
+      imageHash,
+      resultData: crosscheckResult.merged!,
     });
 
     return { kind: "ok", data: crosscheckResult.merged!, metadata };
