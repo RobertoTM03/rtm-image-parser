@@ -1,0 +1,62 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { sql } from "kysely";
+import type { Kysely } from "kysely";
+import { PostgresExtractionLogRepository } from "./postgres-extraction-log-repository.adapter";
+import { connectTestDb, truncateAll } from "./postgres-test-helpers";
+import type { Database } from "./kysely.types";
+
+let db: Kysely<Database> | null = null;
+
+describe("PostgresExtractionLogRepository", () => {
+  beforeAll(async () => {
+    db = await connectTestDb();
+    if (!db) {
+      // eslint-disable-next-line no-console
+      console.warn("PostgresExtractionLogRepository integration tests skipped: no reachable test database.");
+    }
+  });
+
+  beforeEach(async () => {
+    if (db) await truncateAll(db);
+  });
+
+  afterAll(async () => {
+    if (db) await db.destroy();
+  });
+
+  it("persists all metadata fields", async () => {
+    if (!db) return;
+    const repo = new PostgresExtractionLogRepository(db);
+
+    await repo.save({
+      documentType: "ticket",
+      schemaVersion: 1,
+      modelsUsed: ["gemini-1.5-pro"],
+      modelsDropped: [{ modelId: "azure-gpt-4o", reason: "schema_validation_failed" }],
+      confidence: 0.95,
+      crosscheckPassed: null,
+      processingTimeMs: 1234,
+      status: "ok",
+    });
+
+    const rows = await sql<{
+      document_type: string;
+      schema_version: number;
+      models_used: string[];
+      models_dropped: Array<{ modelId: string; reason: string }>;
+      confidence: string;
+      processing_time_ms: number;
+      status: string;
+    }>`select * from extraction_logs`.execute(db);
+
+    expect(rows.rows).toHaveLength(1);
+    const row = rows.rows[0]!;
+    expect(row.document_type).toBe("ticket");
+    expect(row.schema_version).toBe(1);
+    expect(row.models_used).toEqual(["gemini-1.5-pro"]);
+    expect(row.models_dropped).toEqual([{ modelId: "azure-gpt-4o", reason: "schema_validation_failed" }]);
+    expect(Number(row.confidence)).toBeCloseTo(0.95);
+    expect(row.processing_time_ms).toBe(1234);
+    expect(row.status).toBe("ok");
+  });
+});
