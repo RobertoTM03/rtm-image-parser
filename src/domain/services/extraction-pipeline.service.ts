@@ -51,7 +51,6 @@ export class ExtractionPipelineService {
         metadata: {
           modelsUsed: cached.modelsUsed,
           modelsDropped: cached.modelsDropped,
-          confidence: cached.confidence ?? 1,
           processingTimeMs: 0,
           schemaVersion: cached.schemaVersion,
           cached: true,
@@ -87,7 +86,6 @@ export class ExtractionPipelineService {
       const metadata: ExtractionMetadata = {
         modelsUsed: [survivors[0]!.modelId],
         modelsDropped: dropped,
-        confidence: 1,
         processingTimeMs,
         schemaVersion: schema.version,
         cached: false,
@@ -98,7 +96,6 @@ export class ExtractionPipelineService {
         schemaVersion: schema.version,
         modelsUsed: metadata.modelsUsed,
         modelsDropped: dropped,
-        confidence: metadata.confidence,
         crosscheckPassed: null,
         processingTimeMs,
         status: "ok",
@@ -120,7 +117,6 @@ export class ExtractionPipelineService {
     const metadata: ExtractionMetadata = {
       modelsUsed: survivors.map((s) => s.modelId),
       modelsDropped: dropped,
-      confidence: crosscheckResult.score,
       processingTimeMs,
       schemaVersion: schema.version,
       cached: false,
@@ -132,7 +128,6 @@ export class ExtractionPipelineService {
         schemaVersion: schema.version,
         modelsUsed: metadata.modelsUsed,
         modelsDropped: dropped,
-        confidence: metadata.confidence,
         crosscheckPassed: false,
         processingTimeMs,
         status: "discordant",
@@ -140,7 +135,7 @@ export class ExtractionPipelineService {
         resultData: null,
       });
 
-      return { kind: "discordant", score: crosscheckResult.score, mismatches: crosscheckResult.mismatches, metadata };
+      return { kind: "discordant", matchRatio: crosscheckResult.matchRatio, mismatches: crosscheckResult.mismatches, metadata };
     }
 
     await this.logRepo.save({
@@ -148,7 +143,6 @@ export class ExtractionPipelineService {
       schemaVersion: schema.version,
       modelsUsed: metadata.modelsUsed,
       modelsDropped: dropped,
-      confidence: metadata.confidence,
       crosscheckPassed: true,
       processingTimeMs,
       status: "ok",

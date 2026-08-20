@@ -61,8 +61,8 @@ writing a line of JSON.
   the same schema version returns the cached result instantly, no LLM calls
   made. Toggle it off with `CACHE_ENABLED=false` if you always want fresh
   calls.
-- **Full audit trail** — every extraction (models used/dropped, confidence,
-  timing, pass/fail) is logged and queryable via `/v1/extraction-logs`.
+- **Full audit trail** — every extraction (models used/dropped, timing,
+  pass/fail) is logged and queryable via `/v1/extraction-logs`.
 - **Pluggable providers** — Azure OpenAI and Gemini today; adding another
   vision provider means implementing one port interface, not touching the
   pipeline.
@@ -150,7 +150,6 @@ curl -X POST http://localhost:3000/v1/extract \
   "metadata": {
     "modelsUsed": ["azure-gpt-4o", "gemini-1.5-pro"],
     "modelsDropped": [],
-    "confidence": 1,
     "processingTimeMs": 842,
     "schemaVersion": 1,
     "cached": false
@@ -165,7 +164,7 @@ with the specific field mismatches instead of a guessed answer:
 ```json
 {
   "error": "crosscheck_discordant",
-  "score": 0.5,
+  "matchRatio": 0.5,
   "mismatches": [
     { "field": "total", "kind": "value_mismatch", "values": { "azure-gpt-4o": 42.5, "gemini-1.5-pro": 45.0 } }
   ]

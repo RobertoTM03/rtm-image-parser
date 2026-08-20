@@ -5,7 +5,6 @@ export interface ExtractionLog {
   schemaVersion: number;
   modelsUsed: string[];
   modelsDropped: ModelDropped[];
-  confidence: number | null;
   crosscheckPassed: boolean | null;
   processingTimeMs: number;
   status: "ok" | "discordant" | "failed";

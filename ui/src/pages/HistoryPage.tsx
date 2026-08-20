@@ -66,7 +66,6 @@ export default function HistoryPage() {
               <th>Document type</th>
               <th>Version</th>
               <th>Status</th>
-              <th>Confidence</th>
               <th>Crosscheck</th>
               <th>Models used</th>
               <th>Time</th>
@@ -81,7 +80,6 @@ export default function HistoryPage() {
                 <td>
                   <span className={statusPillClass(log.status)}>{log.status}</span>
                 </td>
-                <td>{log.confidence !== null ? log.confidence.toFixed(2) : "—"}</td>
                 <td>
                   {log.crosscheckPassed === null ? "—" : log.crosscheckPassed ? (
                     <span className="pill ok">passed</span>

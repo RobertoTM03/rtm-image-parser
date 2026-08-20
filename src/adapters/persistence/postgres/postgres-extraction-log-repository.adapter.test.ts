@@ -33,7 +33,6 @@ describe("PostgresExtractionLogRepository", () => {
       schemaVersion: 1,
       modelsUsed: ["gemini-1.5-pro"],
       modelsDropped: [{ modelId: "azure-gpt-4o", reason: "schema_validation_failed" }],
-      confidence: 0.95,
       crosscheckPassed: null,
       processingTimeMs: 1234,
       status: "ok",
@@ -46,7 +45,6 @@ describe("PostgresExtractionLogRepository", () => {
       schema_version: number;
       models_used: string[];
       models_dropped: Array<{ modelId: string; reason: string }>;
-      confidence: string;
       processing_time_ms: number;
       status: string;
       image_hash: string;
@@ -59,7 +57,6 @@ describe("PostgresExtractionLogRepository", () => {
     expect(row.schema_version).toBe(1);
     expect(row.models_used).toEqual(["gemini-1.5-pro"]);
     expect(row.models_dropped).toEqual([{ modelId: "azure-gpt-4o", reason: "schema_validation_failed" }]);
-    expect(Number(row.confidence)).toBeCloseTo(0.95);
     expect(row.processing_time_ms).toBe(1234);
     expect(row.status).toBe("ok");
     expect(row.image_hash).toBe("hash-1");
@@ -75,7 +72,6 @@ describe("PostgresExtractionLogRepository", () => {
       schemaVersion: 1,
       modelsUsed: ["gemini-1.5-pro"],
       modelsDropped: [],
-      confidence: 1,
       crosscheckPassed: null,
       processingTimeMs: 100,
       status: "discordant",
@@ -87,7 +83,6 @@ describe("PostgresExtractionLogRepository", () => {
       schemaVersion: 1,
       modelsUsed: ["gemini-1.5-pro"],
       modelsDropped: [],
-      confidence: 1,
       crosscheckPassed: null,
       processingTimeMs: 100,
       status: "ok",
@@ -113,7 +108,6 @@ describe("PostgresExtractionLogRepository", () => {
         schemaVersion: 1,
         modelsUsed: ["gemini-1.5-pro"],
         modelsDropped: [],
-        confidence: 1,
         crosscheckPassed: null,
         processingTimeMs: 100,
         status: "ok",

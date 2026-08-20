@@ -6,7 +6,6 @@ export interface ExtractionLogDto {
   schemaVersion: number;
   modelsUsed: string[];
   modelsDropped: Array<{ modelId: string; reason: string }>;
-  confidence: number | null;
   crosscheckPassed: boolean | null;
   processingTimeMs: number;
   status: "ok" | "discordant" | "failed";
@@ -20,7 +19,6 @@ export function toExtractionLogDto(record: ExtractionLogRecord): ExtractionLogDt
     schemaVersion: record.schemaVersion,
     modelsUsed: record.modelsUsed,
     modelsDropped: record.modelsDropped,
-    confidence: record.confidence,
     crosscheckPassed: record.crosscheckPassed,
     processingTimeMs: record.processingTimeMs,
     status: record.status,

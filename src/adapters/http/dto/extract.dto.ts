@@ -12,7 +12,6 @@ export type ExtractJsonBody = z.infer<typeof extractJsonBodySchema>;
 export interface ExtractionMetadataDto {
   modelsUsed: string[];
   modelsDropped: Array<{ modelId: string; reason: string }>;
-  confidence: number;
   processingTimeMs: number;
   schemaVersion: number;
   cached: boolean;
@@ -22,7 +21,6 @@ export function toMetadataDto(metadata: ExtractionMetadata): ExtractionMetadataD
   return {
     modelsUsed: metadata.modelsUsed,
     modelsDropped: metadata.modelsDropped,
-    confidence: metadata.confidence,
     processingTimeMs: metadata.processingTimeMs,
     schemaVersion: metadata.schemaVersion,
     cached: metadata.cached,
@@ -31,7 +29,7 @@ export function toMetadataDto(metadata: ExtractionMetadata): ExtractionMetadataD
 
 export interface DiscordantResponseDto {
   error: "crosscheck_discordant";
-  score: number;
+  matchRatio: number;
   mismatches: FieldMismatch[];
   metadata: ExtractionMetadataDto;
 }

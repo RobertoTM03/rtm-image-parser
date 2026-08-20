@@ -6,7 +6,6 @@ export interface ModelDropped {
 export interface ExtractionMetadata {
   modelsUsed: string[];
   modelsDropped: ModelDropped[];
-  confidence: number;
   processingTimeMs: number;
   schemaVersion: number;
   /** True when this result was served from the image-hash cache without calling any LLM. */
@@ -27,7 +26,7 @@ export interface ExtractionOkResult {
 
 export interface ExtractionDiscordantResult {
   kind: "discordant";
-  score: number;
+  matchRatio: number;
   mismatches: FieldMismatch[];
   metadata: ExtractionMetadata;
 }

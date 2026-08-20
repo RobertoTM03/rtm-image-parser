@@ -17,7 +17,7 @@ export interface CrosscheckInput {
 
 export interface CrosscheckOutput {
   passed: boolean;
-  score: number;
+  matchRatio: number;
   mismatches: FieldMismatch[];
   merged?: Record<string, unknown>;
 }
@@ -92,20 +92,20 @@ export class CrosscheckService {
     const fields = Object.keys(properties);
 
     if (fields.length === 0) {
-      return { passed: true, score: 1, mismatches: [], merged: { ...input.results[0]!.data } };
+      return { passed: true, matchRatio: 1, mismatches: [], merged: { ...input.results[0]!.data } };
     }
 
     const evaluations = fields.map((field) => evaluateField(field, properties[field], input.results, input.numericTolerance));
 
     const matchingCount = evaluations.filter((e) => e.matched).length;
-    const score = matchingCount / fields.length;
-    const passed = score >= input.threshold;
+    const matchRatio = matchingCount / fields.length;
+    const passed = matchRatio >= input.threshold;
 
     if (!passed) {
       const mismatches: FieldMismatch[] = evaluations
         .filter((e) => !e.matched)
         .map((e) => ({ field: e.field, kind: e.mismatchKind, values: e.valuesByModel }));
-      return { passed: false, score, mismatches };
+      return { passed: false, matchRatio, mismatches };
     }
 
     const merged: Record<string, unknown> = {};
@@ -113,6 +113,6 @@ export class CrosscheckService {
       merged[evaluation.field] = evaluation.mergedValue;
     }
 
-    return { passed: true, score, mismatches: [], merged };
+    return { passed: true, matchRatio, mismatches: [], merged };
   }
 }

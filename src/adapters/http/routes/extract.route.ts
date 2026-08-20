@@ -74,7 +74,7 @@ export function registerExtractRoute(app: FastifyInstance, deps: ExtractRouteDep
     if (result.kind === "discordant") {
       reply.code(422).send({
         error: "crosscheck_discordant",
-        score: result.score,
+        matchRatio: result.matchRatio,
         mismatches: result.mismatches,
         metadata: toMetadataDto(result.metadata),
       });

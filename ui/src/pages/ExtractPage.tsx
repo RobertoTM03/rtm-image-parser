@@ -102,7 +102,7 @@ export default function ExtractPage() {
         {result?.kind === "discordant" && (
           <>
             <div className="banner warn">
-              Models disagreed (score {result.score.toFixed(2)}) — no result was accepted.
+              Models disagreed (match ratio {result.matchRatio.toFixed(2)}) — no result was accepted.
             </div>
             <h3>Mismatches</h3>
             <table className="mismatch-table">
@@ -150,10 +150,6 @@ function MetadataGrid({ metadata: m }: { metadata: ExtractionMetadataDto }) {
       <div className="stat">
         <div className="label">Models used</div>
         <div className="value">{m.modelsUsed.join(", ") || "—"}</div>
-      </div>
-      <div className="stat">
-        <div className="label">Confidence</div>
-        <div className="value">{m.confidence.toFixed(2)}</div>
       </div>
       <div className="stat">
         <div className="label">Schema version</div>

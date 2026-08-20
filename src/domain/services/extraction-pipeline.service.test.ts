@@ -149,7 +149,7 @@ describe("ExtractionPipelineService", () => {
     expect(result.kind).toBe("discordant");
     if (result.kind === "discordant") {
       expect(result.mismatches.length).toBeGreaterThan(0);
-      expect(result.score).toBeLessThan(baseConfig.crosscheckThreshold);
+      expect(result.matchRatio).toBeLessThan(baseConfig.crosscheckThreshold);
     }
     expect(logRepo.saved).toHaveLength(1);
   });
@@ -183,7 +183,6 @@ describe("ExtractionPipelineService", () => {
       expect(result.metadata).toEqual({
         modelsUsed: ["azure-gpt-4o", "gemini-1.5-pro"],
         modelsDropped: [],
-        confidence: 1,
         processingTimeMs: expect.any(Number),
         schemaVersion: 3,
         cached: false,
@@ -200,7 +199,6 @@ describe("ExtractionPipelineService", () => {
       schemaVersion: 3,
       modelsUsed: ["azure-gpt-4o"],
       modelsDropped: [],
-      confidence: 1,
       crosscheckPassed: null,
       processingTimeMs: 500,
       status: "ok",

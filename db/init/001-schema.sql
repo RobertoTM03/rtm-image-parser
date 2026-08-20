@@ -33,7 +33,6 @@ create table extraction_logs (
   schema_version integer not null,
   models_used jsonb not null,
   models_dropped jsonb not null default '[]'::jsonb,
-  confidence numeric,
   crosscheck_passed boolean,
   processing_time_ms integer not null,
   status text not null,

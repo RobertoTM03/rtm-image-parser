@@ -26,7 +26,6 @@ export interface ExtractionLogsTable {
   schema_version: number;
   models_used: JSONColumnType<string[]>;
   models_dropped: JSONColumnType<Array<{ modelId: string; reason: string }>>;
-  confidence: number | null;
   crosscheck_passed: boolean | null;
   processing_time_ms: number;
   status: string;

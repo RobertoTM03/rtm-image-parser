@@ -24,7 +24,7 @@ describe("CrosscheckService", () => {
     });
 
     expect(output.passed).toBe(true);
-    expect(output.score).toBe(1);
+    expect(output.matchRatio).toBe(1);
     expect(output.mismatches).toEqual([]);
     expect(output.merged).toEqual({ merchant: "Acme", total: 100 });
   });
@@ -82,7 +82,7 @@ describe("CrosscheckService", () => {
   });
 
   it("respects the configured threshold as a boundary", () => {
-    // 1 of 2 fields match -> score 0.5
+    // 1 of 2 fields match -> matchRatio 0.5
     const output = service.compare({
       results: [
         { modelId: "azure-gpt-4o", data: { merchant: "Acme", total: 100 } },
@@ -93,7 +93,7 @@ describe("CrosscheckService", () => {
       numericTolerance: 0.01,
     });
 
-    expect(output.score).toBe(0.5);
+    expect(output.matchRatio).toBe(0.5);
     expect(output.passed).toBe(true);
   });
 });

@@ -9,7 +9,6 @@ interface LogRow {
   schema_version: number;
   models_used: string[];
   models_dropped: Array<{ modelId: string; reason: string }>;
-  confidence: string | number | null;
   crosscheck_passed: boolean | null;
   processing_time_ms: number;
   status: string;
@@ -25,7 +24,6 @@ function toRecord(row: LogRow): ExtractionLogRecord {
     schemaVersion: row.schema_version,
     modelsUsed: row.models_used,
     modelsDropped: row.models_dropped,
-    confidence: row.confidence === null ? null : Number(row.confidence),
     crosscheckPassed: row.crosscheck_passed,
     processingTimeMs: row.processing_time_ms,
     status: row.status as ExtractionLog["status"],
@@ -46,7 +44,6 @@ export class PostgresExtractionLogRepository implements ExtractionLogRepositoryP
         schema_version: log.schemaVersion,
         models_used: JSON.stringify(log.modelsUsed),
         models_dropped: JSON.stringify(log.modelsDropped),
-        confidence: log.confidence,
         crosscheck_passed: log.crosscheckPassed,
         processing_time_ms: log.processingTimeMs,
         status: log.status,

@@ -20,7 +20,6 @@ export interface SchemaDefinitionDto {
 export interface ExtractionMetadataDto {
   modelsUsed: string[];
   modelsDropped: Array<{ modelId: string; reason: string }>;
-  confidence: number;
   processingTimeMs: number;
   schemaVersion: number;
 }
@@ -33,7 +32,7 @@ export interface FieldMismatchDto {
 
 export type ExtractResult =
   | { kind: "ok"; data: Record<string, unknown>; metadata: ExtractionMetadataDto }
-  | { kind: "discordant"; score: number; mismatches: FieldMismatchDto[]; metadata: ExtractionMetadataDto }
+  | { kind: "discordant"; matchRatio: number; mismatches: FieldMismatchDto[]; metadata: ExtractionMetadataDto }
   | { kind: "error"; status: number; message: string };
 
 export class ApiError extends Error {
@@ -116,7 +115,6 @@ export interface ExtractionLogDto {
   schemaVersion: number;
   modelsUsed: string[];
   modelsDropped: Array<{ modelId: string; reason: string }>;
-  confidence: number | null;
   crosscheckPassed: boolean | null;
   processingTimeMs: number;
   status: "ok" | "discordant" | "failed";
@@ -145,7 +143,7 @@ export async function extractDocument(file: File, documentType: string): Promise
     return { kind: "ok", data: body.data, metadata: body.metadata };
   }
   if (response.status === 422) {
-    return { kind: "discordant", score: body.score, mismatches: body.mismatches, metadata: body.metadata };
+    return { kind: "discordant", matchRatio: body.matchRatio, mismatches: body.mismatches, metadata: body.metadata };
   }
   return { kind: "error", status: response.status, message: extractMessage(body, response.status) };
 }
