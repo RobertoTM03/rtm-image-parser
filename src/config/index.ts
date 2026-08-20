@@ -24,6 +24,7 @@ export interface Config {
   maxImageSizeBytes: number;
   allowedMimeTypes: string[];
   cacheEnabled: boolean;
+  maxHistoryPageSize: number;
   databaseUrl: string;
   port: number;
 }
@@ -74,6 +75,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     maxImageSizeBytes: Math.round(data.MAX_IMAGE_SIZE_MB * 1024 * 1024),
     allowedMimeTypes: data.ALLOWED_MIME_TYPES.split(",").map((entry) => entry.trim()).filter(Boolean),
     cacheEnabled: data.CACHE_ENABLED,
+    maxHistoryPageSize: data.MAX_HISTORY_PAGE_SIZE,
     databaseUrl: data.DATABASE_URL,
     port: data.PORT,
   };

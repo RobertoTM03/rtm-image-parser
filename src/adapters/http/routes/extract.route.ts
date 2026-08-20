@@ -63,8 +63,8 @@ export function registerExtractRoute(app: FastifyInstance, deps: ExtractRouteDep
     }
 
     // Result caching by image hash (sha256 of the raw image bytes +
-    // document_type + schema_version) happens inside the pipeline, which
-    // skips calling any LLM entirely on a cache hit.
+    // document_type + schema_version) if enabled happens inside the 
+    // pipeline, which skips calling any LLM entirely on a cache hit.
     const result = await deps.pipeline.execute({
       imageBase64: input.imageBase64!,
       mimeType: input.mimeType!,

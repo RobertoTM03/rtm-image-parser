@@ -38,7 +38,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   registerHealthRoute(app);
   registerTemplatesRoute(app, deps.schemaRegistry);
   registerSchemasRoute(app, deps.schemaRegistry);
-  registerExtractionLogsRoute(app, deps.extractionLogRepository);
+  registerExtractionLogsRoute(app, deps.extractionLogRepository, deps.config.maxHistoryPageSize);
   registerExtractRoute(app, {
     schemaRegistry: deps.schemaRegistry,
     pipeline: deps.pipeline,

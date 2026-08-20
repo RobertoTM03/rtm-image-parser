@@ -22,6 +22,7 @@ describe("loadConfig", () => {
     expect(config.allowedMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
     expect(config.port).toBe(3000);
     expect(config.cacheEnabled).toBe(true);
+    expect(config.maxHistoryPageSize).toBe(50);
   });
 
   it("disables caching only when CACHE_ENABLED is exactly \"false\"", () => {
@@ -29,6 +30,10 @@ describe("loadConfig", () => {
     expect(loadConfig({ ...baseEnv, CACHE_ENABLED: "FALSE" }).cacheEnabled).toBe(false);
     expect(loadConfig({ ...baseEnv, CACHE_ENABLED: "true" }).cacheEnabled).toBe(true);
     expect(loadConfig(baseEnv).cacheEnabled).toBe(true);
+  });
+
+  it("overrides the extraction-log page size cap via MAX_HISTORY_PAGE_SIZE", () => {
+    expect(loadConfig({ ...baseEnv, MAX_HISTORY_PAGE_SIZE: "100" }).maxHistoryPageSize).toBe(100);
   });
 
   it("throws when DATABASE_URL is missing", () => {

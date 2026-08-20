@@ -1,5 +1,5 @@
 import type { Kysely } from "kysely";
-import type { ExtractionLogRepositoryPort } from "../../../domain/ports/extraction-log-repository.port";
+import type { ExtractionLogPage, ExtractionLogRepositoryPort } from "../../../domain/ports/extraction-log-repository.port";
 import type { ExtractionLog, ExtractionLogRecord } from "../../../domain/entities/extraction-log.entity";
 import type { Database } from "./kysely.types";
 
@@ -56,15 +56,22 @@ export class PostgresExtractionLogRepository implements ExtractionLogRepositoryP
       .execute();
   }
 
-  async findRecent(limit: number): Promise<ExtractionLogRecord[]> {
+  async findRecent(limit: number, offset: number): Promise<ExtractionLogPage> {
+    // Over-fetch by one row past the page boundary to detect "more pages"
+    // without a separate COUNT(*) query.
     const rows = await this.db
       .selectFrom("extraction_logs")
       .selectAll()
       .orderBy("created_at", "desc")
-      .limit(limit)
+      .limit(limit + 1)
+      .offset(offset)
       .execute();
 
-    return rows.map((row) => toRecord(row as LogRow));
+    const hasMore = rows.length > limit;
+    return {
+      logs: rows.slice(0, limit).map((row) => toRecord(row as LogRow)),
+      hasMore,
+    };
   }
 
   async findCachedResult(

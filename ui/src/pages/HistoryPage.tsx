@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { listExtractionLogs } from "../api";
 import type { ExtractionLogDto } from "../api";
 
+const PAGE_SIZE = 10;
+
 function statusPillClass(status: ExtractionLogDto["status"]): string {
   if (status === "ok") return "pill ok";
   if (status === "discordant") return "pill warn";
@@ -10,16 +12,33 @@ function statusPillClass(status: ExtractionLogDto["status"]): string {
 
 export default function HistoryPage() {
   const [logs, setLogs] = useState<ExtractionLogDto[]>([]);
+  const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   function refresh() {
     setLoading(true);
     setError(null);
-    listExtractionLogs(10)
-      .then(setLogs)
+    listExtractionLogs(PAGE_SIZE, 0)
+      .then((page) => {
+        setLogs(page.logs);
+        setHasMore(page.hasMore);
+      })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
+  }
+
+  function loadMore() {
+    setLoadingMore(true);
+    setError(null);
+    listExtractionLogs(PAGE_SIZE, logs.length)
+      .then((page) => {
+        setLogs((prev) => [...prev, ...page.logs]);
+        setHasMore(page.hasMore);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setLoadingMore(false));
   }
 
   useEffect(refresh, []);
@@ -76,6 +95,14 @@ export default function HistoryPage() {
             ))}
           </tbody>
         </table>
+      )}
+
+      {hasMore && (
+        <div className="actions-row" style={{ justifyContent: "center" }}>
+          <button className="secondary" onClick={loadMore} disabled={loadingMore}>
+            {loadingMore ? "Loading…" : "Load more"}
+          </button>
+        </div>
       )}
     </div>
   );

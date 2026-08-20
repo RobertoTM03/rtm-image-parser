@@ -24,6 +24,8 @@ const testConfig: Omit<Config, "databaseUrl"> = {
   llmRequestTimeoutMs: 30000,
   maxImageSizeBytes: 10 * 1024 * 1024,
   allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"],
+  cacheEnabled: true,
+  maxHistoryPageSize: 50,
   port: 3000,
 };
 
@@ -47,9 +49,10 @@ export async function buildTestApp(fakeProviders: LLMVisionProviderPort[] = []) 
       maxRetriesPerModel: config.maxRetriesPerModel,
       crosscheckThreshold: config.crosscheckThreshold,
       crosscheckNumericTolerance: config.crosscheckNumericTolerance,
+      cacheEnabled: config.cacheEnabled,
     },
   );
 
-  const app = await buildApp({ config, schemaRegistry, pipeline });
+  const app = await buildApp({ config, schemaRegistry, pipeline, extractionLogRepository });
   return { app, db };
 }

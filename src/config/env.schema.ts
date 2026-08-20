@@ -26,6 +26,9 @@ const rawEnvSchema = z.object({
     .default("true")
     .transform((value) => value.toLowerCase() !== "false"),
 
+  // Upper bound the UI (or any client) can request per page from GET /v1/extraction-logs.
+  MAX_HISTORY_PAGE_SIZE: z.coerce.number().int().positive().default(50),
+
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
 
   PORT: z.coerce.number().int().positive().default(3000),

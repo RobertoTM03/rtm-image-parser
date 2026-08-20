@@ -33,7 +33,7 @@ function fakeLogRepo(): ExtractionLogRepositoryPort & { saved: unknown[] } {
     save: async (log) => {
       saved.push(log);
     },
-    findRecent: async () => [],
+    findRecent: async () => ({ logs: [], hasMore: false }),
     findCachedResult: async () => null,
   };
 }

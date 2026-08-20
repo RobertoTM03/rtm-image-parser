@@ -102,4 +102,33 @@ describe("PostgresExtractionLogRepository", () => {
     const miss = await repo.findCachedResult("hash-2", "ticket", 2);
     expect(miss).toBeNull();
   });
+
+  it("paginates recent logs newest-first and reports whether more pages remain", async () => {
+    if (!db) return;
+    const repo = new PostgresExtractionLogRepository(db);
+
+    for (const imageHash of ["hash-a", "hash-b", "hash-c"]) {
+      await repo.save({
+        documentType: "ticket",
+        schemaVersion: 1,
+        modelsUsed: ["gemini-1.5-pro"],
+        modelsDropped: [],
+        confidence: 1,
+        crosscheckPassed: null,
+        processingTimeMs: 100,
+        status: "ok",
+        imageHash,
+        resultData: null,
+      });
+    }
+
+    const firstPage = await repo.findRecent(2, 0);
+    expect(firstPage.logs).toHaveLength(2);
+    expect(firstPage.logs.map((l) => l.imageHash)).toEqual(["hash-c", "hash-b"]);
+    expect(firstPage.hasMore).toBe(true);
+
+    const secondPage = await repo.findRecent(2, 2);
+    expect(secondPage.logs.map((l) => l.imageHash)).toEqual(["hash-a"]);
+    expect(secondPage.hasMore).toBe(false);
+  });
 });

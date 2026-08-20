@@ -1,12 +1,4 @@
 -- Full database schema for rtm-image-parser.
---
--- This runs automatically the first time the `db` container initializes an
--- empty data directory (see docker-entrypoint-initdb.d in the postgres
--- image). There is no migration tool in this project: this file is the only
--- source of truth for the schema, and it is safe to edit directly since the
--- project isn't deployed anywhere with existing data to preserve. To pick up
--- changes made here on an existing local volume, recreate it:
---   docker compose down -v && docker compose up -d --build
 
 create extension if not exists pgcrypto;
 
@@ -54,6 +46,7 @@ create index extraction_logs_document_type_idx on extraction_logs (document_type
 create index extraction_logs_image_hash_document_type_schema_version_idx
   on extraction_logs (image_hash, document_type, schema_version);
 
+-- Insert default schema templates for common document types.
 insert into schema_templates (name, description, schema, field_hints) values
   (
     'ticket',

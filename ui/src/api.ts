@@ -123,8 +123,13 @@ export interface ExtractionLogDto {
   createdAt: string;
 }
 
-export function listExtractionLogs(limit = 10): Promise<ExtractionLogDto[]> {
-  return requestJson<{ logs: ExtractionLogDto[] }>(`/v1/extraction-logs?limit=${limit}`).then((r) => r.logs);
+export interface ExtractionLogPageDto {
+  logs: ExtractionLogDto[];
+  hasMore: boolean;
+}
+
+export function listExtractionLogs(limit = 10, offset = 0): Promise<ExtractionLogPageDto> {
+  return requestJson<ExtractionLogPageDto>(`/v1/extraction-logs?limit=${limit}&offset=${offset}`);
 }
 
 export async function extractDocument(file: File, documentType: string): Promise<ExtractResult> {

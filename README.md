@@ -199,7 +199,7 @@ POST   /v1/schemas                       { documentType, basedOnTemplate?, schem
 GET    /v1/schemas/:document_type
 PUT    /v1/schemas/:document_type        { schema?, fieldHints? }   # new version, never overwrites
 GET    /v1/schemas/:document_type/versions
-GET    /v1/extraction-logs
+GET    /v1/extraction-logs               ?limit=&offset=   # paginated, capped by MAX_HISTORY_PAGE_SIZE
 ```
 
 ## Configuration
@@ -218,6 +218,7 @@ Copy `.env.example` to `.env` and fill in values:
 | `MAX_IMAGE_SIZE_MB` | defaults to `10` | |
 | `ALLOWED_MIME_TYPES` | defaults to `image/jpeg,image/png,image/webp` | |
 | `CACHE_ENABLED` | defaults to `true` | Set to `false` to skip the by-image-hash (SHA-256) result cache and always call the LLMs. |
+| `MAX_HISTORY_PAGE_SIZE` | defaults to `50` | Upper bound on `limit` for paginated `GET /v1/extraction-logs` requests. |
 | `DATABASE_URL` | always | |
 | `PORT` | defaults to `3000` | |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | used by `docker-compose.yml` to provision `db` | |
