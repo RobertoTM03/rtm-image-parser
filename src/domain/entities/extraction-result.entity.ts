@@ -6,6 +6,8 @@ export interface ModelDropped {
 export interface ExtractionMetadata {
   modelsUsed: string[];
   modelsDropped: ModelDropped[];
+  /** Schema fields (required or not) that ended up null in the returned data. Empty for "discordant". */
+  missingFields: string[];
   processingTimeMs: number;
   schemaVersion: number;
   /** True when this result was served from the image-hash cache without calling any LLM. */
@@ -31,4 +33,12 @@ export interface ExtractionDiscordantResult {
   metadata: ExtractionMetadata;
 }
 
-export type ExtractionResult = ExtractionOkResult | ExtractionDiscordantResult;
+export interface ExtractionIncompleteResult {
+  kind: "incomplete";
+  data: Record<string, unknown>;
+  /** Required fields no model could obtain. */
+  missingFields: string[];
+  metadata: ExtractionMetadata;
+}
+
+export type ExtractionResult = ExtractionOkResult | ExtractionDiscordantResult | ExtractionIncompleteResult;

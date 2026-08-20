@@ -2,7 +2,13 @@ import { createHash } from "node:crypto";
 import type { LLMVisionProviderPort } from "../ports/llm-vision-provider.port";
 import type { ExtractionLogRepositoryPort } from "../ports/extraction-log-repository.port";
 import type { SchemaDefinition } from "../entities/schema-definition.entity";
-import type { ExtractionMetadata, ExtractionResult, ModelDropped } from "../entities/extraction-result.entity";
+import type {
+  ExtractionIncompleteResult,
+  ExtractionMetadata,
+  ExtractionOkResult,
+  ExtractionResult,
+  ModelDropped,
+} from "../entities/extraction-result.entity";
 import { CrosscheckService } from "./crosscheck.service";
 import { AllModelsFailedError } from "../errors/domain-errors";
 
@@ -27,6 +33,52 @@ export interface ExtractPipelineInput {
   activeSchema: SchemaDefinition;
 }
 
+interface JSONSchemaWithProperties {
+  properties?: Record<string, unknown>;
+  required?: string[];
+}
+
+/** Root-level `required` is the only kind the UI's schema builder produces. */
+function schemaWithoutRequired(schema: object): object {
+  const { required: _required, ...rest } = schema as JSONSchemaWithProperties & Record<string, unknown>;
+  return rest;
+}
+
+interface SchemaCompletion {
+  data: Record<string, unknown>;
+  /** Every schema field that ended up null, required or not. */
+  missingFields: string[];
+  /** Subset of missingFields that the schema marks required. */
+  missingRequiredFields: string[];
+}
+
+/**
+ * Fills every schema property into `data`, defaulting absent/null ones to
+ * `null` so the caller always gets the full field set back, and reports
+ * which ones were missing (and which of those were required).
+ */
+function completeAgainstSchema(schema: object, data: Record<string, unknown>): SchemaCompletion {
+  const { properties = {}, required = [] } = schema as JSONSchemaWithProperties;
+  const requiredSet = new Set(required);
+
+  const complete: Record<string, unknown> = {};
+  const missingFields: string[] = [];
+  const missingRequiredFields: string[] = [];
+
+  for (const field of Object.keys(properties)) {
+    const value = data[field];
+    if (value === undefined || value === null) {
+      complete[field] = null;
+      missingFields.push(field);
+      if (requiredSet.has(field)) missingRequiredFields.push(field);
+    } else {
+      complete[field] = value;
+    }
+  }
+
+  return { data: complete, missingFields, missingRequiredFields };
+}
+
 export class ExtractionPipelineService {
   constructor(
     private readonly providers: LLMVisionProviderPort[],
@@ -45,12 +97,14 @@ export class ExtractionPipelineService {
       ? await this.logRepo.findCachedResult(imageHash, schema.documentType, schema.version)
       : null;
     if (cached) {
+      const completion = completeAgainstSchema(schema.schema, cached.resultData!);
       return {
         kind: "ok",
-        data: cached.resultData!,
+        data: completion.data,
         metadata: {
           modelsUsed: cached.modelsUsed,
           modelsDropped: cached.modelsDropped,
+          missingFields: completion.missingFields,
           processingTimeMs: 0,
           schemaVersion: cached.schemaVersion,
           cached: true,
@@ -83,27 +137,13 @@ export class ExtractionPipelineService {
 
     if (survivors.length === 1) {
       // Single surviving model: crosscheck is skipped entirely.
-      const metadata: ExtractionMetadata = {
+      return this.finalizeResult(schema, survivors[0]!.data, {
         modelsUsed: [survivors[0]!.modelId],
         modelsDropped: dropped,
         processingTimeMs,
-        schemaVersion: schema.version,
-        cached: false,
-      };
-
-      await this.logRepo.save({
-        documentType: schema.documentType,
-        schemaVersion: schema.version,
-        modelsUsed: metadata.modelsUsed,
-        modelsDropped: dropped,
-        crosscheckPassed: null,
-        processingTimeMs,
-        status: "ok",
         imageHash,
-        resultData: survivors[0]!.data,
+        crosscheckPassed: null,
       });
-
-      return { kind: "ok", data: survivors[0]!.data, metadata };
     }
 
     // survivors preserves this.providers' order, i.e. EXTRACTION_MODELS order.
@@ -114,15 +154,16 @@ export class ExtractionPipelineService {
       numericTolerance: this.config.crosscheckNumericTolerance,
     });
 
-    const metadata: ExtractionMetadata = {
-      modelsUsed: survivors.map((s) => s.modelId),
-      modelsDropped: dropped,
-      processingTimeMs,
-      schemaVersion: schema.version,
-      cached: false,
-    };
-
     if (!crosscheckResult.passed) {
+      const metadata: ExtractionMetadata = {
+        modelsUsed: survivors.map((s) => s.modelId),
+        modelsDropped: dropped,
+        missingFields: [],
+        processingTimeMs,
+        schemaVersion: schema.version,
+        cached: false,
+      };
+
       await this.logRepo.save({
         documentType: schema.documentType,
         schemaVersion: schema.version,
@@ -138,19 +179,55 @@ export class ExtractionPipelineService {
       return { kind: "discordant", matchRatio: crosscheckResult.matchRatio, mismatches: crosscheckResult.mismatches, metadata };
     }
 
+    return this.finalizeResult(schema, crosscheckResult.merged!, {
+      modelsUsed: survivors.map((s) => s.modelId),
+      modelsDropped: dropped,
+      processingTimeMs,
+      imageHash,
+      crosscheckPassed: true,
+    });
+  }
+
+  private async finalizeResult(
+    schema: SchemaDefinition,
+    rawData: Record<string, unknown>,
+    save: {
+      modelsUsed: string[];
+      modelsDropped: ModelDropped[];
+      processingTimeMs: number;
+      imageHash: string;
+      crosscheckPassed: boolean | null;
+    },
+  ): Promise<ExtractionOkResult | ExtractionIncompleteResult> {
+    const completion = completeAgainstSchema(schema.schema, rawData);
+    const metadata: ExtractionMetadata = {
+      modelsUsed: save.modelsUsed,
+      modelsDropped: save.modelsDropped,
+      missingFields: completion.missingFields,
+      processingTimeMs: save.processingTimeMs,
+      schemaVersion: schema.version,
+      cached: false,
+    };
+
+    const isIncomplete = completion.missingRequiredFields.length > 0;
+
     await this.logRepo.save({
       documentType: schema.documentType,
       schemaVersion: schema.version,
-      modelsUsed: metadata.modelsUsed,
-      modelsDropped: dropped,
-      crosscheckPassed: true,
-      processingTimeMs,
-      status: "ok",
-      imageHash,
-      resultData: crosscheckResult.merged!,
+      modelsUsed: save.modelsUsed,
+      modelsDropped: save.modelsDropped,
+      crosscheckPassed: save.crosscheckPassed,
+      processingTimeMs: save.processingTimeMs,
+      status: isIncomplete ? "incomplete" : "ok",
+      imageHash: save.imageHash,
+      resultData: completion.data,
     });
 
-    return { kind: "ok", data: crosscheckResult.merged!, metadata };
+    if (isIncomplete) {
+      return { kind: "incomplete", data: completion.data, missingFields: completion.missingRequiredFields, metadata };
+    }
+
+    return { kind: "ok", data: completion.data, metadata };
   }
 
   private async callWithRetry(
@@ -170,7 +247,7 @@ export class ExtractionPipelineService {
           fieldHints: schema.fieldHints,
         });
 
-        const validation = this.validateAgainstSchema(schema.schema, response.rawOutput);
+        const validation = this.validateAgainstSchema(schemaWithoutRequired(schema.schema), response.rawOutput);
         if (validation.valid) {
           return response.rawOutput as Record<string, unknown>;
         }

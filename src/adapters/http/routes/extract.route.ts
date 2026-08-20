@@ -81,6 +81,16 @@ export function registerExtractRoute(app: FastifyInstance, deps: ExtractRouteDep
       return;
     }
 
+    if (result.kind === "incomplete") {
+      reply.code(422).send({
+        error: "missing_required_fields",
+        data: result.data,
+        missingFields: result.missingFields,
+        metadata: toMetadataDto(result.metadata),
+      });
+      return;
+    }
+
     reply.code(200).send({ data: result.data, metadata: toMetadataDto(result.metadata) });
   });
 }

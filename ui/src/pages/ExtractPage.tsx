@@ -131,6 +131,17 @@ export default function ExtractPage() {
           </>
         )}
 
+        {result?.kind === "incomplete" && (
+          <>
+            <div className="banner error">
+              Missing required field{result.missingFields.length > 1 ? "s" : ""}: {result.missingFields.join(", ")}
+            </div>
+            <h3>Data</h3>
+            <pre className="json-view">{JSON.stringify(result.data, null, 2)}</pre>
+            <MetadataGrid metadata={result.metadata} />
+          </>
+        )}
+
         {result?.kind === "ok" && (
           <>
             <div className="banner ok">Extraction accepted.</div>
@@ -163,6 +174,12 @@ function MetadataGrid({ metadata: m }: { metadata: ExtractionMetadataDto }) {
         <div className="stat" style={{ gridColumn: "1 / -1" }}>
           <div className="label">Dropped models</div>
           <div className="value">{m.modelsDropped.map((d) => `${d.modelId} (${d.reason})`).join("; ")}</div>
+        </div>
+      )}
+      {m.missingFields.length > 0 && (
+        <div className="stat" style={{ gridColumn: "1 / -1" }}>
+          <div className="label">Fields not found</div>
+          <div className="value">{m.missingFields.join(", ")}</div>
         </div>
       )}
     </div>

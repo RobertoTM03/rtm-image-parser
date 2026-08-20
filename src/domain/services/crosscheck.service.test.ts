@@ -81,6 +81,40 @@ describe("CrosscheckService", () => {
     expect(totalMismatch?.kind).toBe("missing_field");
   });
 
+  it("treats a field missing from every model as agreement, not a mismatch", () => {
+    const output = service.compare({
+      results: [
+        { modelId: "azure-gpt-4o", data: { merchant: "Acme" } },
+        { modelId: "gemini-1.5-pro", data: { merchant: "Acme" } },
+      ],
+      schema,
+      threshold: 0.9,
+      numericTolerance: 0.01,
+    });
+
+    expect(output.passed).toBe(true);
+    expect(output.matchRatio).toBe(1);
+    expect(output.mismatches).toEqual([]);
+    expect(output.merged?.merchant).toBe("Acme");
+    expect(output.merged?.total).toBeUndefined();
+  });
+
+  it("merges using the value from whichever model actually returned it, not the first model in order", () => {
+    const output = service.compare({
+      results: [
+        { modelId: "azure-gpt-4o", data: { merchant: "Acme" } },
+        { modelId: "gemini-1.5-pro", data: { merchant: "Acme", total: 100 } },
+      ],
+      schema,
+      // Threshold tolerates the one missing-field mismatch (1 of 2 fields match).
+      threshold: 0.5,
+      numericTolerance: 0.01,
+    });
+
+    expect(output.passed).toBe(true);
+    expect(output.merged?.total).toBe(100);
+  });
+
   it("respects the configured threshold as a boundary", () => {
     // 1 of 2 fields match -> matchRatio 0.5
     const output = service.compare({

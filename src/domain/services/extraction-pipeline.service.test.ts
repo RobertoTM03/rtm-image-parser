@@ -18,6 +18,17 @@ const schema: SchemaDefinition = {
   createdAt: new Date(),
 };
 
+// merchant/total are required; currency is optional — used to test the
+// missing-required-field vs missing-optional-field distinction.
+const requiredSchema: SchemaDefinition = {
+  ...schema,
+  schema: {
+    type: "object",
+    properties: { merchant: { type: "string" }, total: { type: "number" }, currency: { type: "string" } },
+    required: ["merchant", "total"],
+  },
+};
+
 function provider(modelId: string, impl: () => Promise<LLMVisionExtractionResponse>): LLMVisionProviderPort {
   return { modelId, extract: vi.fn(impl) };
 }
@@ -183,6 +194,7 @@ describe("ExtractionPipelineService", () => {
       expect(result.metadata).toEqual({
         modelsUsed: ["azure-gpt-4o", "gemini-1.5-pro"],
         modelsDropped: [],
+        missingFields: [],
         processingTimeMs: expect.any(Number),
         schemaVersion: 3,
         cached: false,
@@ -249,5 +261,125 @@ describe("ExtractionPipelineService", () => {
       expect(result.metadata.cached).toBe(false);
     }
     expect(logRepo.saved).toHaveLength(1);
+  });
+
+  it("returns incomplete when the single surviving model can't produce a required field", async () => {
+    const p1 = provider("gemini-1.5-pro", async () => ({
+      modelId: "gemini-1.5-pro",
+      rawOutput: { merchant: "Acme" },
+      latencyMs: 1,
+    }));
+
+    const logRepo = fakeLogRepo();
+    const pipeline = new ExtractionPipelineService([p1], new CrosscheckService(), alwaysValid(), logRepo, baseConfig);
+
+    const result = await pipeline.execute({ imageBase64: "x", mimeType: "image/png", activeSchema: requiredSchema });
+
+    expect(result.kind).toBe("incomplete");
+    if (result.kind === "incomplete") {
+      expect(result.missingFields).toEqual(["total"]);
+      expect(result.data).toEqual({ merchant: "Acme", total: null, currency: null });
+    }
+    expect(logRepo.saved).toHaveLength(1);
+    expect((logRepo.saved[0] as { status: string }).status).toBe("incomplete");
+  });
+
+  it("stays ok when only an optional field is missing, filled with null", async () => {
+    const p1 = provider("gemini-1.5-pro", async () => ({
+      modelId: "gemini-1.5-pro",
+      rawOutput: { merchant: "Acme", total: 100 },
+      latencyMs: 1,
+    }));
+
+    const logRepo = fakeLogRepo();
+    const pipeline = new ExtractionPipelineService([p1], new CrosscheckService(), alwaysValid(), logRepo, baseConfig);
+
+    const result = await pipeline.execute({ imageBase64: "x", mimeType: "image/png", activeSchema: requiredSchema });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data).toEqual({ merchant: "Acme", total: 100, currency: null });
+      expect(result.metadata.missingFields).toEqual(["currency"]);
+    }
+  });
+
+  it("fills a missing required field from the other model when only one of them has it", async () => {
+    const p1 = provider("azure-gpt-4o", async () => ({
+      modelId: "azure-gpt-4o",
+      rawOutput: { merchant: "Acme" },
+      latencyMs: 1,
+    }));
+    const p2 = provider("gemini-1.5-pro", async () => ({
+      modelId: "gemini-1.5-pro",
+      rawOutput: { merchant: "Acme", total: 100 },
+      latencyMs: 1,
+    }));
+
+    const logRepo = fakeLogRepo();
+    const pipeline = new ExtractionPipelineService([p1, p2], new CrosscheckService(), alwaysValid(), logRepo, {
+      ...baseConfig,
+      crosscheckThreshold: 0.6,
+    });
+
+    const result = await pipeline.execute({ imageBase64: "x", mimeType: "image/png", activeSchema: requiredSchema });
+
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.data).toEqual({ merchant: "Acme", total: 100, currency: null });
+    }
+  });
+
+  it("returns incomplete when neither model can produce a required field", async () => {
+    const p1 = provider("azure-gpt-4o", async () => ({
+      modelId: "azure-gpt-4o",
+      rawOutput: { merchant: "Acme" },
+      latencyMs: 1,
+    }));
+    const p2 = provider("gemini-1.5-pro", async () => ({
+      modelId: "gemini-1.5-pro",
+      rawOutput: { merchant: "Acme" },
+      latencyMs: 1,
+    }));
+
+    const logRepo = fakeLogRepo();
+    const pipeline = new ExtractionPipelineService([p1, p2], new CrosscheckService(), alwaysValid(), logRepo, baseConfig);
+
+    const result = await pipeline.execute({ imageBase64: "x", mimeType: "image/png", activeSchema: requiredSchema });
+
+    expect(result.kind).toBe("incomplete");
+    if (result.kind === "incomplete") {
+      expect(result.missingFields).toEqual(["total"]);
+    }
+  });
+
+  it("does not spend retries on a missing required field — the validator receives a required-stripped schema", async () => {
+    let calls = 0;
+    const p1 = provider("gemini-1.5-pro", async () => {
+      calls += 1;
+      return { modelId: "gemini-1.5-pro", rawOutput: { merchant: "Acme" }, latencyMs: 1 };
+    });
+
+    // Mimics how the real ajv validator behaves: invalid whenever the schema
+    // it's given declares a required field the data doesn't have.
+    const requiredAwareValidator: SchemaValidator = (schemaArg, data) => {
+      const required = (schemaArg as { required?: string[] }).required ?? [];
+      const d = data as Record<string, unknown>;
+      const missing = required.filter((field) => d[field] === undefined);
+      return { valid: missing.length === 0, errors: missing.map((field) => `missing ${field}`) };
+    };
+
+    const logRepo = fakeLogRepo();
+    const pipeline = new ExtractionPipelineService(
+      [p1],
+      new CrosscheckService(),
+      requiredAwareValidator,
+      logRepo,
+      baseConfig,
+    );
+
+    const result = await pipeline.execute({ imageBase64: "x", mimeType: "image/png", activeSchema: requiredSchema });
+
+    expect(calls).toBe(1);
+    expect(result.kind).toBe("incomplete");
   });
 });

@@ -150,6 +150,7 @@ curl -X POST http://localhost:3000/v1/extract \
   "metadata": {
     "modelsUsed": ["azure-gpt-4o", "gemini-1.5-pro"],
     "modelsDropped": [],
+    "missingFields": [],
     "processingTimeMs": 842,
     "schemaVersion": 1,
     "cached": false
@@ -157,9 +158,25 @@ curl -X POST http://localhost:3000/v1/extract \
 }
 ```
 
+`data` always has every field the schema declares — a field no model could
+find comes back as `null` rather than being dropped from the JSON, and is
+listed in `metadata.missingFields`. If that field is also in the schema's
+`required` list, the extraction is rejected outright: a **422** with the
+specific fields that are missing, alongside the same `null`-filled `data` for
+inspection:
+
+```json
+{
+  "error": "missing_required_fields",
+  "data": { "merchant": "Acme", "total": null, "currency": "EUR" },
+  "missingFields": ["total"],
+  "metadata": { "modelsUsed": ["azure-gpt-4o"], "modelsDropped": [], "missingFields": ["total"], "processingTimeMs": 512, "schemaVersion": 1, "cached": false }
+}
+```
+
 A JSON body (`imageBase64` + `mimeType` + `documentType`) works too. If the
-configured models disagree beyond `CROSSCHECK_THRESHOLD`, you get a **422**
-with the specific field mismatches instead of a guessed answer:
+configured models disagree beyond `CROSSCHECK_THRESHOLD`, you also get a
+**422**, but with the specific field mismatches instead of a guessed answer:
 
 ```json
 {

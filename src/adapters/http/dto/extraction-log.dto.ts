@@ -8,7 +8,7 @@ export interface ExtractionLogDto {
   modelsDropped: Array<{ modelId: string; reason: string }>;
   crosscheckPassed: boolean | null;
   processingTimeMs: number;
-  status: "ok" | "discordant" | "failed";
+  status: "ok" | "discordant" | "incomplete" | "failed";
   createdAt: string;
 }
 

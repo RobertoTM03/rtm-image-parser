@@ -112,6 +112,31 @@ describe("POST /v1/extract", () => {
     expect(called).toBe(false);
   });
 
+  it("422s with the missing required fields, and still returns the completed JSON, when the real ajv validator sees a gap", async () => {
+    if (!dbAvailable) return;
+    const requiredSchema = {
+      type: "object",
+      properties: { merchant: { type: "string" }, total: { type: "number" } },
+      required: ["merchant", "total"],
+    };
+    const app = await setupApp([fakeProvider("fake-model", { merchant: "Acme" })]);
+    if (!app) return;
+
+    await app.inject({ method: "POST", url: "/v1/schemas", payload: { documentType: "ticket-extract-5", schema: requiredSchema } });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/v1/extract",
+      payload: { imageBase64: smallPngBase64, mimeType: "image/png", documentType: "ticket-extract-5" },
+    });
+
+    expect(response.statusCode).toBe(422);
+    const body = response.json();
+    expect(body.error).toBe("missing_required_fields");
+    expect(body.missingFields).toEqual(["total"]);
+    expect(body.data).toEqual({ merchant: "Acme", total: null });
+  });
+
   it("422s with per-field mismatches when 2 models disagree beyond the threshold", async () => {
     if (!dbAvailable) return;
     const app = await setupApp([

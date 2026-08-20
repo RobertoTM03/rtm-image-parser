@@ -20,6 +20,7 @@ export interface SchemaDefinitionDto {
 export interface ExtractionMetadataDto {
   modelsUsed: string[];
   modelsDropped: Array<{ modelId: string; reason: string }>;
+  missingFields: string[];
   processingTimeMs: number;
   schemaVersion: number;
 }
@@ -33,6 +34,7 @@ export interface FieldMismatchDto {
 export type ExtractResult =
   | { kind: "ok"; data: Record<string, unknown>; metadata: ExtractionMetadataDto }
   | { kind: "discordant"; matchRatio: number; mismatches: FieldMismatchDto[]; metadata: ExtractionMetadataDto }
+  | { kind: "incomplete"; data: Record<string, unknown>; missingFields: string[]; metadata: ExtractionMetadataDto }
   | { kind: "error"; status: number; message: string };
 
 export class ApiError extends Error {
@@ -117,7 +119,7 @@ export interface ExtractionLogDto {
   modelsDropped: Array<{ modelId: string; reason: string }>;
   crosscheckPassed: boolean | null;
   processingTimeMs: number;
-  status: "ok" | "discordant" | "failed";
+  status: "ok" | "discordant" | "incomplete" | "failed";
   createdAt: string;
 }
 
@@ -143,6 +145,9 @@ export async function extractDocument(file: File, documentType: string): Promise
     return { kind: "ok", data: body.data, metadata: body.metadata };
   }
   if (response.status === 422) {
+    if (body.error === "missing_required_fields") {
+      return { kind: "incomplete", data: body.data, missingFields: body.missingFields, metadata: body.metadata };
+    }
     return { kind: "discordant", matchRatio: body.matchRatio, mismatches: body.mismatches, metadata: body.metadata };
   }
   return { kind: "error", status: response.status, message: extractMessage(body, response.status) };

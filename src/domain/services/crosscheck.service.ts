@@ -34,14 +34,24 @@ interface FieldEvaluation {
   valuesByModel: Record<string, unknown>;
 }
 
+function firstDefinedValue(field: string, results: CrosscheckModelResult[]): unknown {
+  return results.find((r) => r.data[field] !== undefined)?.data[field];
+}
+
 function evaluateField(field: string, fieldSchema: JSONSchemaFieldDef | undefined, results: CrosscheckModelResult[], numericTolerance: number): FieldEvaluation {
   const valuesByModel: Record<string, unknown> = {};
   for (const result of results) {
     valuesByModel[result.modelId] = result.data[field];
   }
 
+  // No model returned this field: they agree it's absent, not a disagreement
+  // to flag — the pipeline's own required-field check handles this case.
+  if (results.every((r) => r.data[field] === undefined)) {
+    return { field, matched: true, mismatchKind: "missing_field", mergedValue: undefined, valuesByModel };
+  }
+
   const hasMissing = results.some((r) => r.data[field] === undefined);
-  const firstValue = results[0]!.data[field];
+  const fallbackValue = firstDefinedValue(field, results);
 
   if (results.length === 2) {
     const matched = compareField(results[0]!.data[field], results[1]!.data[field], fieldSchema, numericTolerance);
@@ -49,14 +59,16 @@ function evaluateField(field: string, fieldSchema: JSONSchemaFieldDef | undefine
       field,
       matched,
       mismatchKind: hasMissing ? "missing_field" : "value_mismatch",
-      mergedValue: matched ? firstValue : firstValue,
+      mergedValue: fallbackValue,
       valuesByModel,
     };
   }
 
-  // N >= 3: majority clustering — a value "wins" if more than half the models agree on it.
+  // N >= 3: majority clustering — a value "wins" if more than half the models
+  // agree on it. Models missing the field don't join any cluster.
   const clusters: Array<{ value: unknown; modelIds: string[] }> = [];
   for (const result of results) {
+    if (result.data[field] === undefined) continue;
     const value = result.data[field];
     const cluster = clusters.find((c) => compareField(c.value, value, fieldSchema, numericTolerance));
     if (cluster) {
@@ -72,7 +84,7 @@ function evaluateField(field: string, fieldSchema: JSONSchemaFieldDef | undefine
     field,
     matched: Boolean(majority),
     mismatchKind: hasMissing ? "missing_field" : "value_mismatch",
-    mergedValue: majority ? majority.value : firstValue,
+    mergedValue: majority ? majority.value : fallbackValue,
     valuesByModel,
   };
 }
