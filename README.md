@@ -57,8 +57,10 @@ writing a line of JSON.
 - **Schema versioning** — every save creates a new version instead of
   overwriting the last one; old versions and the extractions made against
   them stay intact.
-- **Result caching** — the same image against the same schema version
-  returns the cached result instantly, no LLM calls made.
+- **Result caching** — the same image (matched by a SHA-256 hash) against
+  the same schema version returns the cached result instantly, no LLM calls
+  made. Toggle it off with `CACHE_ENABLED=false` if you always want fresh
+  calls.
 - **Full audit trail** — every extraction (models used/dropped, confidence,
   timing, pass/fail) is logged and queryable via `/v1/extraction-logs`.
 - **Pluggable providers** — Azure OpenAI and Gemini today; adding another
@@ -215,6 +217,7 @@ Copy `.env.example` to `.env` and fill in values:
 | `LLM_REQUEST_TIMEOUT_MS` | defaults to `30000` | Per-request timeout for LLM provider calls. |
 | `MAX_IMAGE_SIZE_MB` | defaults to `10` | |
 | `ALLOWED_MIME_TYPES` | defaults to `image/jpeg,image/png,image/webp` | |
+| `CACHE_ENABLED` | defaults to `true` | Set to `false` to skip the by-image-hash (SHA-256) result cache and always call the LLMs. |
 | `DATABASE_URL` | always | |
 | `PORT` | defaults to `3000` | |
 | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | used by `docker-compose.yml` to provision `db` | |

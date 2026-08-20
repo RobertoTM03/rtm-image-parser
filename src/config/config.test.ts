@@ -21,6 +21,14 @@ describe("loadConfig", () => {
     expect(config.maxImageSizeBytes).toBe(10 * 1024 * 1024);
     expect(config.allowedMimeTypes).toEqual(["image/jpeg", "image/png", "image/webp"]);
     expect(config.port).toBe(3000);
+    expect(config.cacheEnabled).toBe(true);
+  });
+
+  it("disables caching only when CACHE_ENABLED is exactly \"false\"", () => {
+    expect(loadConfig({ ...baseEnv, CACHE_ENABLED: "false" }).cacheEnabled).toBe(false);
+    expect(loadConfig({ ...baseEnv, CACHE_ENABLED: "FALSE" }).cacheEnabled).toBe(false);
+    expect(loadConfig({ ...baseEnv, CACHE_ENABLED: "true" }).cacheEnabled).toBe(true);
+    expect(loadConfig(baseEnv).cacheEnabled).toBe(true);
   });
 
   it("throws when DATABASE_URL is missing", () => {

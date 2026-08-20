@@ -9,6 +9,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-rtm_image_parser}
     volumes:
       - db_data:/var/lib/postgresql/data
+      # Runs automatically once, the first time this volume is initialized
+      # (empty data dir) — creates the full schema and seed data directly, no
+      # migration tool involved. See db/init/001-schema.sql.
+      - ./db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rtm} -d ${POSTGRES_DB:-rtm_image_parser}"]
       interval: 5s
@@ -23,9 +27,9 @@ services:
     env_file: .env
     environment:
       # Overrides .env's DATABASE_URL (which points at localhost for host-side
-      # tooling like `npm run dev`/`npm run migrate` outside Docker) so the
-      # containerized api reaches Postgres via the compose network instead.
-      # Credentials still come from the same POSTGRES_* vars in .env.
+      # tooling like `npm run dev` outside Docker) so the containerized api
+      # reaches Postgres via the compose network instead. Credentials still
+      # come from the same POSTGRES_* vars in .env.
       DATABASE_URL: postgresql://${POSTGRES_USER:-rtm}:${POSTGRES_PASSWORD:-rtm}@db:5432/${POSTGRES_DB:-rtm_image_parser}
     depends_on:
       db:

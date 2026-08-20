@@ -37,6 +37,7 @@ async function main(): Promise<void> {
       maxRetriesPerModel: config.maxRetriesPerModel,
       crosscheckThreshold: config.crosscheckThreshold,
       crosscheckNumericTolerance: config.crosscheckNumericTolerance,
+      cacheEnabled: config.cacheEnabled,
     },
   );
 

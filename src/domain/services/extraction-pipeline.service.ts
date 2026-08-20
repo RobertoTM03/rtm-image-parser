@@ -17,6 +17,7 @@ export interface ExtractionPipelineConfig {
   maxRetriesPerModel: number;
   crosscheckThreshold: number;
   crosscheckNumericTolerance: number;
+  cacheEnabled: boolean;
 }
 
 export interface ExtractPipelineInput {
@@ -40,7 +41,9 @@ export class ExtractionPipelineService {
     const schema = input.activeSchema;
     const imageHash = createHash("sha256").update(Buffer.from(input.imageBase64, "base64")).digest("hex");
 
-    const cached = await this.logRepo.findCachedResult(imageHash, schema.documentType, schema.version);
+    const cached = this.config.cacheEnabled
+      ? await this.logRepo.findCachedResult(imageHash, schema.documentType, schema.version)
+      : null;
     if (cached) {
       return {
         kind: "ok",

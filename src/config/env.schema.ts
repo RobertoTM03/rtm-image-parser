@@ -20,6 +20,12 @@ const rawEnvSchema = z.object({
   MAX_IMAGE_SIZE_MB: z.coerce.number().positive().default(10),
   ALLOWED_MIME_TYPES: z.string().default("image/jpeg,image/png,image/webp"),
 
+  // Only the literal string "false" disables caching; anything else (including unset) keeps it on.
+  CACHE_ENABLED: z
+    .string()
+    .default("true")
+    .transform((value) => value.toLowerCase() !== "false"),
+
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
 
   PORT: z.coerce.number().int().positive().default(3000),

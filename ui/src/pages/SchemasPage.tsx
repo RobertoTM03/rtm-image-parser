@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import {
   ApiError,
@@ -10,6 +10,8 @@ import {
   updateSchema,
 } from "../api";
 import type { SchemaDefinitionDto, SchemaTemplateDto } from "../api";
+import SchemaEditor from "../components/SchemaEditor";
+import { validateSchemaText } from "../lib/schemaValidation";
 
 interface HintRow {
   key: string;
@@ -123,7 +125,7 @@ export default function SchemasPage() {
         />
       )}
       {selected && selected !== "new" && (
-        <SchemaDetail documentType={selected} onUpdated={refreshLists} />
+        <SchemaDetail key={selected} documentType={selected} onUpdated={refreshLists} />
       )}
       {!selected && (
         <div className="card">
@@ -148,6 +150,8 @@ function NewSchemaForm({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  const validation = useMemo(() => validateSchemaText(schemaText), [schemaText]);
+
   function applyTemplate(name: string) {
     setBasedOnTemplate(name);
     const template = templates.find((t) => t.name === name);
@@ -161,15 +165,11 @@ function NewSchemaForm({
     event.preventDefault();
     setError(null);
 
-    let parsedSchema: Record<string, unknown> | undefined;
-    if (schemaText.trim()) {
-      try {
-        parsedSchema = JSON.parse(schemaText);
-      } catch {
-        setError("Schema is not valid JSON");
-        return;
-      }
+    if (!validation.valid) {
+      setError(`Fix the schema before creating: ${validation.errors[0]}`);
+      return;
     }
+    const parsedSchema = validation.parsed;
 
     if (!documentType.trim()) {
       setError("document_type is required");
@@ -221,18 +221,12 @@ function NewSchemaForm({
         </select>
 
         <label htmlFor="new-schema">JSON Schema</label>
-        <textarea
-          id="new-schema"
-          className="code"
-          placeholder='{"type":"object","properties":{...}}'
-          value={schemaText}
-          onChange={(e) => setSchemaText(e.target.value)}
-        />
+        <SchemaEditor key={basedOnTemplate} id="new-schema" value={schemaText} onChange={setSchemaText} />
 
         <label>Field hints</label>
         <FieldHintsEditor rows={hintRows} onChange={setHintRows} />
 
-        <button className="primary" type="submit" disabled={saving}>
+        <button className="primary" type="submit" disabled={saving || !validation.valid}>
           {saving ? "Creating…" : "Create schema"}
         </button>
       </form>
@@ -264,19 +258,18 @@ function SchemaDetail({ documentType, onUpdated }: { documentType: string; onUpd
       });
   }, [documentType]);
 
+  const validation = useMemo(() => validateSchemaText(schemaText), [schemaText]);
+
   async function handleSave() {
     setError(null);
-    let parsedSchema: Record<string, unknown>;
-    try {
-      parsedSchema = JSON.parse(schemaText);
-    } catch {
-      setError("Schema is not valid JSON");
+    if (!validation.valid || !validation.parsed) {
+      setError(`Fix the schema before saving: ${validation.errors[0] ?? "schema is empty"}`);
       return;
     }
 
     setSaving(true);
     try {
-      const updated = await updateSchema(documentType, { schema: parsedSchema, fieldHints: rowsToHints(hintRows) });
+      const updated = await updateSchema(documentType, { schema: validation.parsed, fieldHints: rowsToHints(hintRows) });
       setCurrent(updated);
       const newVersions = await listSchemaVersions(documentType);
       setVersions(newVersions);
@@ -300,13 +293,13 @@ function SchemaDetail({ documentType, onUpdated }: { documentType: string; onUpd
       {error && <div className="banner error">{error}</div>}
 
       <label htmlFor="edit-schema">JSON Schema</label>
-      <textarea id="edit-schema" className="code" value={schemaText} onChange={(e) => setSchemaText(e.target.value)} />
+      <SchemaEditor id="edit-schema" value={schemaText} onChange={setSchemaText} />
 
       <label>Field hints</label>
       <FieldHintsEditor rows={hintRows} onChange={setHintRows} />
 
       <div className="actions-row">
-        <button className="primary" onClick={handleSave} disabled={saving}>
+        <button className="primary" onClick={handleSave} disabled={saving || !validation.valid || !schemaText.trim()}>
           {saving ? "Saving…" : "Save as new version"}
         </button>
       </div>

@@ -39,7 +39,12 @@ function fakeLogRepo(): ExtractionLogRepositoryPort & { saved: unknown[] } {
 }
 
 describe("ExtractionPipelineService", () => {
-  const baseConfig = { maxRetriesPerModel: 1, crosscheckThreshold: 0.9, crosscheckNumericTolerance: 0.01 };
+  const baseConfig = {
+    maxRetriesPerModel: 1,
+    crosscheckThreshold: 0.9,
+    crosscheckNumericTolerance: 0.01,
+    cacheEnabled: true,
+  };
 
   it("skips crosscheck and returns the result directly when only one model survives", async () => {
     const p1 = provider("gemini-1.5-pro", async () => ({
@@ -221,5 +226,30 @@ describe("ExtractionPipelineService", () => {
       expect(result.data).toEqual({ merchant: "Acme", total: 100 });
       expect(result.metadata.cached).toBe(true);
     }
+  });
+
+  it("ignores an existing cache entry and calls the providers when caching is disabled", async () => {
+    const p1 = provider("azure-gpt-4o", async () => ({
+      modelId: "azure-gpt-4o",
+      rawOutput: { merchant: "Acme", total: 100 },
+      latencyMs: 1,
+    }));
+    const logRepo = fakeLogRepo();
+    const findCachedResult = vi.fn(logRepo.findCachedResult);
+    logRepo.findCachedResult = findCachedResult;
+
+    const pipeline = new ExtractionPipelineService([p1], new CrosscheckService(), alwaysValid(), logRepo, {
+      ...baseConfig,
+      cacheEnabled: false,
+    });
+
+    const result = await pipeline.execute({ imageBase64: "x", mimeType: "image/png", activeSchema: schema });
+
+    expect(findCachedResult).not.toHaveBeenCalled();
+    expect(result.kind).toBe("ok");
+    if (result.kind === "ok") {
+      expect(result.metadata.cached).toBe(false);
+    }
+    expect(logRepo.saved).toHaveLength(1);
   });
 });

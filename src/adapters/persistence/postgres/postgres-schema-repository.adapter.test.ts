@@ -14,7 +14,7 @@ describe("PostgresSchemaRepository", () => {
       // eslint-disable-next-line no-console
       console.warn(
         "PostgresSchemaRepository integration tests skipped: no reachable TEST_DATABASE_URL/DATABASE_URL. " +
-          "Run `docker compose up -d db` and `npm run migrate:up` first.",
+          "Run `docker compose up -d db` first (schema is created automatically on first init).",
       );
     }
   });

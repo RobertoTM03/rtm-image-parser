@@ -23,6 +23,7 @@ export interface Config {
   llmRequestTimeoutMs: number;
   maxImageSizeBytes: number;
   allowedMimeTypes: string[];
+  cacheEnabled: boolean;
   databaseUrl: string;
   port: number;
 }
@@ -72,6 +73,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     llmRequestTimeoutMs: data.LLM_REQUEST_TIMEOUT_MS,
     maxImageSizeBytes: Math.round(data.MAX_IMAGE_SIZE_MB * 1024 * 1024),
     allowedMimeTypes: data.ALLOWED_MIME_TYPES.split(",").map((entry) => entry.trim()).filter(Boolean),
+    cacheEnabled: data.CACHE_ENABLED,
     databaseUrl: data.DATABASE_URL,
     port: data.PORT,
   };
