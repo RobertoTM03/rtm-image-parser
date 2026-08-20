@@ -1,136 +1,146 @@
-# rtm-image-parser
+<h1 align="center">Document Extractor</h1>
+<p align="center">
+  Turn any image with structured data on it into validated JSON — you define what to extract.
+</p>
 
-Reusable document extraction microservice. Upload a document image (ticket,
-invoice, ...), it gets processed by one or more vision-capable LLMs (Azure
-OpenAI, Gemini), the outputs are crosschecked against each other and
-validated against a configurable JSON Schema, and a structured JSON result is
-returned.
+<p align="center">
+  <img alt="GitHub package.json version" src="https://img.shields.io/github/package-json/v/RobertoTM03/rtm-image-parser">
+  <img alt="License" src="https://img.shields.io/github/license/RobertoTM03/rtm-image-parser">
+  <img alt="Node" src="https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white">
+</p>
 
-## Architecture
+<p align="center">
+  <a href="#features">Features</a> &nbsp;|&nbsp;
+  <a href="#quick-start">Quick start</a> &nbsp;|&nbsp;
+  <a href="#usage">Usage</a> &nbsp;|&nbsp;
+  <a href="#configuration">Configuration</a>
+</p>
 
-Hexagonal (ports & adapters):
+<br>
 
-```
-src/
-  domain/        # pure business logic: pipeline orchestration, crosscheck,
-                  # schema versioning rules. No framework/DB/LLM SDK imports.
-    entities/
-    ports/        # LLMVisionProviderPort, SchemaRepositoryPort, ExtractionLogRepositoryPort
-    services/
-  adapters/       # concrete implementations of the ports above
-    llm/azure-openai/
-    llm/gemini/
-    validation/   # ajv JSON Schema validator, injected into the domain as a plain function
-    persistence/postgres/
-    http/         # Fastify routes/controllers
-  config/         # loads and validates .env — the ONLY place process.env is read
-```
+<p align="center">
+  <img src="./.github/assets/Conversion_Example.png" alt="A receipt photo converted into structured JSON" width="800">
+  <br>
+  <sub>A photo in, validated structured JSON out.</sub>
+</p>
 
-The domain never imports from `adapters/`, `pg`, `kysely`, `fastify`, `ajv`,
-or any LLM SDK. Adapters depend on domain ports, never the reverse.
+## About
 
-## Requirements
+Document Extractor is a self-hosted microservice (+ web UI) that turns a
+photo of **anything with structured data on it** into clean, validated JSON.
+There's no fixed notion of "document type" baked in — you describe the
+fields you care about, point the pipeline at one or more vision LLMs, and it
+does the OCR-and-structuring work you'd otherwise hand-code per image type.
 
-- Node.js 20+
-- Docker + Docker Compose (recommended way to run everything, including Postgres)
+Tickets and invoices ship as ready-made example schemas so there's something
+to try the moment it's running, but they're just that — examples. The same
+pipeline extracts whatever fields matter to you from whatever kind of image
+you throw at it: ID documents, shipping labels, forms, product packaging,
+anything.
 
-## Environment variables
+Where it earns its keep over "just call a vision model yourself": it can call
+**more than one** model for the same image and only accept the result if
+they agree, catches invalid output before it ever reaches your database, and
+gives non-technical teammates a way to define new document types without
+writing a line of JSON.
 
-Copy `.env.example` to `.env` and fill in values:
+## Features
 
-| Variable | Required when | Notes |
-|---|---|---|
-| `EXTRACTION_MODELS` | always | Comma-separated model ids for the pipeline, e.g. `azure-gpt-4o,gemini-1.5-pro`. Only `azure-*` and `gemini-*` ids are supported; unrecognized ids are logged as a warning and skipped at startup. If none of the listed ids are recognized, the service fails to start. |
-| `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_VERSION`, `AZURE_OPENAI_DEPLOYMENT_NAME` | an `azure-*` model is in `EXTRACTION_MODELS` | |
-| `GEMINI_API_KEY`, `GEMINI_MODEL_NAME` | a `gemini-*` model is in `EXTRACTION_MODELS` | |
-| `CROSSCHECK_THRESHOLD` | always (defaults to `0.9`) | Minimum fraction of matching fields for a multi-model result to be accepted. |
-| `CROSSCHECK_NUMERIC_TOLERANCE` | always (defaults to `0.01`) | Relative tolerance used when comparing numeric fields across models. |
-| `MAX_RETRIES_PER_MODEL` | always (defaults to `2`) | Retries per model when its output fails schema validation, before dropping that model. |
-| `LLM_REQUEST_TIMEOUT_MS` | always (defaults to `30000`) | Per-request timeout for LLM provider calls. |
-| `MAX_IMAGE_SIZE_MB` | always (defaults to `10`) | |
-| `ALLOWED_MIME_TYPES` | always (defaults to `image/jpeg,image/png,image/webp`) | |
-| `DATABASE_URL` | always | |
-| `PORT` | always (defaults to `3000`) | |
-| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | only used by `docker-compose.yml` to provision the `db` service | |
+- **Multi-model cross-check** — run any image through more than one vision
+  model at once; results are compared field by field and only accepted if
+  they agree above a configurable threshold. A single model hallucinating a
+  value doesn't silently make it into your data.
+- **Visual schema builder** — define what to extract (fields, types,
+  required-ness, nested lists and groups) by clicking, or drop into raw JSON
+  Schema when you need something the builder doesn't cover. Both views stay
+  in sync, and every schema is validated before it can be saved.
+- **Schema versioning** — every save creates a new version instead of
+  overwriting the last one; old versions and the extractions made against
+  them stay intact.
+- **Result caching** — the same image against the same schema version
+  returns the cached result instantly, no LLM calls made.
+- **Full audit trail** — every extraction (models used/dropped, confidence,
+  timing, pass/fail) is logged and queryable via `/v1/extraction-logs`.
+- **Pluggable providers** — Azure OpenAI and Gemini today; adding another
+  vision provider means implementing one port interface, not touching the
+  pipeline.
+- **Zero-setup database** — `docker compose up` gets Postgres, the API, and
+  the UI running with the schema and two starter templates (ticket, invoice)
+  already loaded. No migration step, nothing to run by hand — replace or
+  delete the starter templates whenever you define your own.
 
-Only `src/config/` reads `process.env`; every other module receives a typed
-`Config` object.
+## Supported providers
 
-## Running with Docker (recommended)
+| Provider | Configure with |
+|---|---|
+| Azure OpenAI | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_VERSION`, `AZURE_OPENAI_DEPLOYMENT_NAME` |
+| Google Gemini | `GEMINI_API_KEY`, `GEMINI_MODEL_NAME` |
+
+List any combination of `azure-*`/`gemini-*` model ids in `EXTRACTION_MODELS`
+to use them together for cross-checking.
+
+Providers are just implementations of one port interface
+(`LLMVisionProviderPort`) — the extraction pipeline only talks to that
+interface, never to a specific SDK. Wiring up another vision model means
+adding an adapter that implements it, not touching how extraction works.
+
+## Quick Start
+
+Requires [Docker](https://www.docker.com/) + Docker Compose.
 
 ```bash
+git clone https://github.com/RobertoTM03/rtm-image-parser.git
+cd rtm-image-parser
 cp .env.example .env
-# fill in AZURE_OPENAI_* and/or GEMINI_* credentials for the models you listed
+# fill in AZURE_OPENAI_* and/or GEMINI_* credentials for the models you list
 # in EXTRACTION_MODELS
 
 docker compose up -d --build
 ```
 
-This starts `db` (Postgres, with a healthcheck gating `api`'s startup) and
-`api` (this service). `DATABASE_URL` in `.env` is meant for host-side tooling
-(see below); the `api` container gets a compose-network-correct
-`DATABASE_URL` (pointing at `db`) via an override in `docker-compose.yml`,
-built from the same `POSTGRES_*` variables — no duplicated credentials.
+That's it — no separate migration step. Postgres creates the full schema and
+seeds two starter templates (`ticket`, `factura`) automatically the first
+time it initializes.
 
-Run database migrations (creates tables + seeds the `ticket`/`factura`
-templates):
-
-```bash
-docker compose run --rm api npm run migrate:up
-```
-
-Check it's up:
+- UI: [http://localhost:5173](http://localhost:5173)
+- API: [http://localhost:3000](http://localhost:3000)
 
 ```bash
 curl http://localhost:3000/health
 curl http://localhost:3000/v1/templates
 ```
 
-## Running locally without Docker
+Prefer running the API on the host (with Postgres in Docker) for
+development?
 
 ```bash
 npm install
 cp .env.example .env   # DATABASE_URL here should point at localhost:5432
 docker compose up -d db
-npm run migrate:up
 npm run dev
 ```
 
-## Tests
+## Usage
+
+The examples below use the HTTP API directly. For quick manual testing
+without writing `curl` commands, the bundled UI at
+[http://localhost:5173](http://localhost:5173) wraps the same endpoints in
+plain forms — upload an image, pick a document type, see the result. It's a
+testing convenience, not a production dashboard; since it's just the `ui`
+service in `docker-compose.yml`, drop it (or run `docker compose up -d db
+api`) if you don't want it running.
+
+### Extract a document
+
+`document_type` is just the name of a schema you've registered — `ticket`
+here is one of the two examples that ship by default, not a hardcoded
+concept. Any image, matched to any schema you've defined, works the same way.
 
 ```bash
-npm test
+curl -X POST http://localhost:3000/v1/extract \
+  -F "image=@receipt.jpg" \
+  -F "document_type=ticket"
 ```
-
-Unit tests run with no external dependencies. Integration tests (Postgres
-adapters + HTTP endpoints) need a reachable database — start one with
-`docker compose up -d db` (and run migrations) first; they set
-`TEST_DATABASE_URL`/`DATABASE_URL` from `.env` and skip cleanly (with a
-console warning) if no database is reachable.
-
-## API
-
-### `POST /v1/extract`
-
-Accepts either `multipart/form-data` (`image` file field + `document_type`
-field) or JSON:
-
-```json
-{
-  "imageBase64": "...",
-  "mimeType": "image/png",
-  "documentType": "ticket"
-}
-```
-
-Input (mime type, size, and whether `document_type` has an active schema) is
-validated before any LLM is called. Before calling any model, the pipeline
-also checks for a previous **successful** result for the same image (sha256
-of the raw bytes) + `document_type` + active schema version; on a hit it
-returns that result directly (`metadata.cached: true`, no LLM calls made).
-
-**200 OK** — result accepted (single model, multiple models that agreed above
-`CROSSCHECK_THRESHOLD`, or a cache hit):
 
 ```json
 {
@@ -146,11 +156,9 @@ returns that result directly (`metadata.cached: true`, no LLM calls made).
 }
 ```
 
-**400 Bad Request** — invalid mime type, image too large, or unknown
-`document_type`. No LLM was called.
-
-**422 Unprocessable Entity** — models disagreed beyond the configured
-threshold; no winner is invented:
+A JSON body (`imageBase64` + `mimeType` + `documentType`) works too. If the
+configured models disagree beyond `CROSSCHECK_THRESHOLD`, you get a **422**
+with the specific field mismatches instead of a guessed answer:
 
 ```json
 {
@@ -158,29 +166,87 @@ threshold; no winner is invented:
   "score": 0.5,
   "mismatches": [
     { "field": "total", "kind": "value_mismatch", "values": { "azure-gpt-4o": 42.5, "gemini-1.5-pro": 45.0 } }
-  ],
-  "metadata": { "...": "..." }
+  ]
 }
 ```
 
-**502 Bad Gateway** — every configured model failed to produce schema-valid
-output after retries.
+### Define what to extract
 
-### Schema registry
+Either through the UI's visual builder (see screenshot above) or directly:
+
+```bash
+curl -X POST http://localhost:3000/v1/schemas \
+  -H "Content-Type: application/json" \
+  -d '{
+    "documentType": "delivery-note",
+    "schema": {
+      "type": "object",
+      "required": ["reference", "date"],
+      "properties": {
+        "reference": { "type": "string" },
+        "date": { "type": "string", "format": "date" }
+      }
+    },
+    "fieldHints": { "reference": "Delivery note reference number, top-right of the document" }
+  }'
+```
 
 ```
-GET    /v1/templates
+GET    /v1/templates                     # starter templates to base a schema on
 POST   /v1/schemas                       { documentType, basedOnTemplate?, schema?, fieldHints? }
 GET    /v1/schemas/:document_type
-PUT    /v1/schemas/:document_type        { schema?, fieldHints? }   # inserts a new version, never overwrites
+PUT    /v1/schemas/:document_type        { schema?, fieldHints? }   # new version, never overwrites
 GET    /v1/schemas/:document_type/versions
+GET    /v1/extraction-logs
 ```
 
-## Out of scope for this phase
+## Configuration
 
-- **Authentication**: not implemented. `src/adapters/http/plugins/auth.placeholder.ts`
-  is a no-op `preHandler` hook already wired into every route — a real auth
-  check can be added there later without touching route definitions.
-- **Visual schema form builder / schema import-export**: not implemented. The
-  `SchemaTemplate`/`SchemaDefinition` data model does not need to change to
-  add these later.
+Copy `.env.example` to `.env` and fill in values:
+
+| Variable | Required when | Notes |
+|---|---|---|
+| `EXTRACTION_MODELS` | always | Comma-separated model ids, e.g. `azure-gpt-4o,gemini-1.5-pro`. Unrecognized ids are skipped with a warning; if none are recognized, the service refuses to start. |
+| `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_VERSION`, `AZURE_OPENAI_DEPLOYMENT_NAME` | an `azure-*` model is listed | |
+| `GEMINI_API_KEY`, `GEMINI_MODEL_NAME` | a `gemini-*` model is listed | |
+| `CROSSCHECK_THRESHOLD` | defaults to `0.9` | Minimum fraction of matching fields for a multi-model result to be accepted. |
+| `CROSSCHECK_NUMERIC_TOLERANCE` | defaults to `0.01` | Relative tolerance when comparing numeric fields across models. |
+| `MAX_RETRIES_PER_MODEL` | defaults to `2` | Retries per model when its output fails schema validation. |
+| `LLM_REQUEST_TIMEOUT_MS` | defaults to `30000` | Per-request timeout for LLM provider calls. |
+| `MAX_IMAGE_SIZE_MB` | defaults to `10` | |
+| `ALLOWED_MIME_TYPES` | defaults to `image/jpeg,image/png,image/webp` | |
+| `DATABASE_URL` | always | |
+| `PORT` | defaults to `3000` | |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | used by `docker-compose.yml` to provision `db` | |
+
+## Development
+
+```bash
+npm test          # unit + integration tests (integration tests need `docker compose up -d db`)
+npm run typecheck
+```
+
+Under the hood this is a hexagonal (ports & adapters) service — the domain
+layer has zero imports of Fastify, Postgres, ajv, or any LLM SDK, so swapping
+a provider or the database is an adapter change, not a rewrite.
+
+## Known limitations
+
+- **No authentication** — not implemented yet.
+  `src/adapters/http/plugins/auth.placeholder.ts` is a no-op hook already
+  wired into every route, ready for a real check to be dropped in.
+- **No schema import/export** — the visual builder covers most JSON Schema
+  shapes (nested objects, lists, formats, enums); anything more exotic
+  (`oneOf`, `$ref`, patterns) needs the raw JSON editor.
+
+## Authors
+
+**Roberto Tejero Martín** — design and development
+
+## License
+
+[MIT](./LICENSE)
+
+## AI Disclosure
+
+This project was developed using [Claude Code](https://claude.com/claude-code) as a programming assistant.
