@@ -1,22 +1,12 @@
 import "dotenv/config";
 import { envSchema } from "./env.schema";
+import type { LLMModelConfig } from "./env.schema";
 
-export interface AzureOpenAIConfig {
-  apiKey: string;
-  endpoint: string;
-  apiVersion: string;
-  deploymentName: string;
-}
-
-export interface GeminiConfig {
-  apiKey: string;
-  modelName: string;
-}
+export type { LLMModelConfig } from "./env.schema";
 
 export interface Config {
   extractionModelIds: string[];
-  azureOpenAI: AzureOpenAIConfig | null;
-  gemini: GeminiConfig | null;
+  llmModels: LLMModelConfig[];
   crosscheckThreshold: number;
   crosscheckNumericTolerance: number;
   maxRetriesPerModel: number;
@@ -49,25 +39,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
 
-  const needsAzure = modelIds.some((id) => id.startsWith("azure-"));
-  const needsGemini = modelIds.some((id) => id.startsWith("gemini-"));
-
   return {
     extractionModelIds: modelIds,
-    azureOpenAI: needsAzure
-      ? {
-          apiKey: data.AZURE_OPENAI_API_KEY!,
-          endpoint: data.AZURE_OPENAI_ENDPOINT!,
-          apiVersion: data.AZURE_OPENAI_API_VERSION!,
-          deploymentName: data.AZURE_OPENAI_DEPLOYMENT_NAME!,
-        }
-      : null,
-    gemini: needsGemini
-      ? {
-          apiKey: data.GEMINI_API_KEY!,
-          modelName: data.GEMINI_MODEL_NAME!,
-        }
-      : null,
+    llmModels: data.LLM_MODELS,
     crosscheckThreshold: data.CROSSCHECK_THRESHOLD,
     crosscheckNumericTolerance: data.CROSSCHECK_NUMERIC_TOLERANCE,
     maxRetriesPerModel: data.MAX_RETRIES_PER_MODEL,

@@ -5,6 +5,7 @@ import { PostgresSchemaRepository } from "./adapters/persistence/postgres/postgr
 import { PostgresExtractionLogRepository } from "./adapters/persistence/postgres/postgres-extraction-log-repository.adapter";
 import { validateAgainstSchema } from "./adapters/validation/ajv-schema-validator";
 import { azureOpenAIProviderFactory } from "./adapters/llm/azure-openai/azure-openai.adapter";
+import { openAIProviderFactory } from "./adapters/llm/openai/openai.adapter";
 import { geminiProviderFactory } from "./adapters/llm/gemini/gemini.adapter";
 import { SchemaRegistryService } from "./domain/services/schema-registry.service";
 import { CrosscheckService } from "./domain/services/crosscheck.service";
@@ -23,7 +24,7 @@ async function main(): Promise<void> {
   // logged and skipped here, never re-evaluated per request.
   const providers = LLMProviderRegistry.resolve(
     config.extractionModelIds,
-    [azureOpenAIProviderFactory, geminiProviderFactory],
+    [azureOpenAIProviderFactory, openAIProviderFactory, geminiProviderFactory],
     config,
     { warn: (message) => console.warn(`[llm-provider-registry] ${message}`) },
   );

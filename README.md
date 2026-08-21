@@ -73,13 +73,28 @@ writing a line of JSON.
 
 ## Supported providers
 
-| Provider | Configure with |
-|---|---|
-| Azure OpenAI | `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_VERSION`, `AZURE_OPENAI_DEPLOYMENT_NAME` |
-| Google Gemini | `GEMINI_API_KEY`, `GEMINI_MODEL_NAME` |
+Models are configured as a JSON list in `LLM_MODELS` (see `.env.example` for
+the fully commented version) — one self-contained entry per model
+connection, each with its own credentials:
 
-List any combination of `azure-*`/`gemini-*` model ids in `EXTRACTION_MODELS`
-to use them together for cross-checking.
+| Provider | Required fields |
+|---|---|
+| `azure` (Azure OpenAI) | `apiKey`, `endpoint`, `apiVersion`, `deployment` |
+| `openai` (OpenAI directly) | `apiKey`, `model` |
+| `gemini` (Google Gemini) | `apiKey`, `model` |
+
+```json
+[
+  { "id": "azure-primary", "provider": "azure", "apiKey": "...", "endpoint": "https://...openai.azure.com", "apiVersion": "2024-10-21", "deployment": "gpt-4o-prod" },
+  { "id": "openai-gpt4o",  "provider": "openai", "apiKey": "...", "model": "gpt-4o" }
+]
+```
+
+`EXTRACTION_MODELS` then picks which of those `id`s run (and in what order —
+it's the tie-break when models disagree). Because each entry has its own
+credentials, nothing ties two entries of the same provider together: list as
+many Azure deployments, OpenAI models, or Gemini models as you want, from
+different resources/regions if needed, and cross-check across all of them.
 
 Providers are just implementations of one port interface
 (`LLMVisionProviderPort`) — the extraction pipeline only talks to that
@@ -94,8 +109,8 @@ Requires [Docker](https://www.docker.com/) + Docker Compose.
 git clone https://github.com/RobertoTM03/rtm-image-parser.git
 cd rtm-image-parser
 cp .env.example .env
-# fill in AZURE_OPENAI_* and/or GEMINI_* credentials for the models you list
-# in EXTRACTION_MODELS
+# fill in the credentials for each model in LLM_MODELS, then list the ones
+# you want active in EXTRACTION_MODELS
 
 docker compose up -d --build
 ```
@@ -224,9 +239,8 @@ Copy `.env.example` to `.env` and fill in values:
 
 | Variable | Required when | Notes |
 |---|---|---|
-| `EXTRACTION_MODELS` | always | Comma-separated model ids, e.g. `azure-gpt-4o,gemini-1.5-pro`. Unrecognized ids are skipped with a warning; if none are recognized, the service refuses to start. |
-| `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_VERSION`, `AZURE_OPENAI_DEPLOYMENT_NAME` | an `azure-*` model is listed | |
-| `GEMINI_API_KEY`, `GEMINI_MODEL_NAME` | a `gemini-*` model is listed | |
+| `LLM_MODELS` | always | JSON array of model connections (id, provider, credentials) — see [Supported providers](#supported-providers) and the commented example in `.env.example`. |
+| `EXTRACTION_MODELS` | always | Comma-separated `LLM_MODELS` ids to actually use, in order (order is the tie-break when models disagree). An id missing from `LLM_MODELS` is skipped with a warning; if none resolve, the service refuses to start. |
 | `CROSSCHECK_THRESHOLD` | defaults to `0.9` | Minimum fraction of matching fields for a multi-model result to be accepted. |
 | `CROSSCHECK_NUMERIC_TOLERANCE` | defaults to `0.01` | Relative tolerance when comparing numeric fields across models. |
 | `MAX_RETRIES_PER_MODEL` | defaults to `2` | Retries per model when its output fails schema validation. |

@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "./index";
 
+const geminiModel = { id: "gemini-1.5-pro", provider: "gemini", apiKey: "gemini-key", model: "gemini-1.5-pro" };
+
 const baseEnv = {
   EXTRACTION_MODELS: "gemini-1.5-pro",
-  GEMINI_API_KEY: "gemini-key",
-  GEMINI_MODEL_NAME: "gemini-1.5-pro",
+  LLM_MODELS: JSON.stringify([geminiModel]),
   DATABASE_URL: "postgresql://user:pass@localhost:5432/db",
 };
 
@@ -13,8 +14,7 @@ describe("loadConfig", () => {
     const config = loadConfig(baseEnv);
 
     expect(config.extractionModelIds).toEqual(["gemini-1.5-pro"]);
-    expect(config.gemini).toEqual({ apiKey: "gemini-key", modelName: "gemini-1.5-pro" });
-    expect(config.azureOpenAI).toBeNull();
+    expect(config.llmModels).toEqual([geminiModel]);
     expect(config.crosscheckThreshold).toBe(0.9);
     expect(config.crosscheckNumericTolerance).toBe(0.01);
     expect(config.maxRetriesPerModel).toBe(2);
@@ -41,49 +41,59 @@ describe("loadConfig", () => {
     expect(() => loadConfig(rest)).toThrow(/DATABASE_URL/);
   });
 
-  it("throws when an azure-* model is active but azure credentials are missing", () => {
-    expect(() =>
-      loadConfig({
-        EXTRACTION_MODELS: "azure-gpt-4o",
-        DATABASE_URL: baseEnv.DATABASE_URL,
-      }),
-    ).toThrow(/AZURE_OPENAI_API_KEY/);
+  it("throws when LLM_MODELS is not valid JSON", () => {
+    expect(() => loadConfig({ ...baseEnv, LLM_MODELS: "not json" })).toThrow(/LLM_MODELS must be valid JSON/);
   });
 
-  it("throws when a gemini-* model is active but gemini credentials are missing", () => {
+  it("throws when an LLM_MODELS entry has an unknown provider", () => {
     expect(() =>
-      loadConfig({
-        EXTRACTION_MODELS: "gemini-1.5-pro",
-        DATABASE_URL: baseEnv.DATABASE_URL,
-      }),
-    ).toThrow(/GEMINI_API_KEY/);
+      loadConfig({ ...baseEnv, LLM_MODELS: JSON.stringify([{ id: "x", provider: "claude", apiKey: "k" }]) }),
+    ).toThrow(/LLM_MODELS is invalid/);
   });
 
-  it("resolves both provider configs when both families are active", () => {
+  it("throws when an LLM_MODELS azure entry is missing a required field", () => {
+    expect(() =>
+      loadConfig({
+        ...baseEnv,
+        LLM_MODELS: JSON.stringify([{ id: "x", provider: "azure", apiKey: "k", endpoint: "https://x" }]),
+      }),
+    ).toThrow(/LLM_MODELS is invalid/);
+  });
+
+  it("throws when two LLM_MODELS entries share the same id", () => {
+    expect(() =>
+      loadConfig({
+        ...baseEnv,
+        LLM_MODELS: JSON.stringify([geminiModel, geminiModel]),
+      }),
+    ).toThrow(/Duplicate LLM_MODELS id/);
+  });
+
+  it("supports several models from the same provider, each with its own credentials", () => {
+    const azurePrimary = {
+      id: "azure-primary",
+      provider: "azure",
+      apiKey: "key-1",
+      endpoint: "https://one.openai.azure.com",
+      apiVersion: "2024-10-21",
+      deployment: "gpt-4o-prod",
+    };
+    const azureSecondary = {
+      id: "azure-secondary",
+      provider: "azure",
+      apiKey: "key-2",
+      endpoint: "https://two.openai.azure.com",
+      apiVersion: "2024-10-21",
+      deployment: "gpt-4-turbo",
+    };
+
     const config = loadConfig({
-      EXTRACTION_MODELS: "azure-gpt-4o,gemini-1.5-pro",
-      AZURE_OPENAI_API_KEY: "azure-key",
-      AZURE_OPENAI_ENDPOINT: "https://example.openai.azure.com",
-      AZURE_OPENAI_API_VERSION: "2024-10-21",
-      AZURE_OPENAI_DEPLOYMENT_NAME: "gpt-4o-deployment",
-      GEMINI_API_KEY: "gemini-key",
-      GEMINI_MODEL_NAME: "gemini-1.5-pro",
+      EXTRACTION_MODELS: "azure-primary,azure-secondary",
+      LLM_MODELS: JSON.stringify([azurePrimary, azureSecondary]),
       DATABASE_URL: baseEnv.DATABASE_URL,
     });
 
-    expect(config.azureOpenAI).not.toBeNull();
-    expect(config.gemini).not.toBeNull();
-    expect(config.extractionModelIds).toEqual(["azure-gpt-4o", "gemini-1.5-pro"]);
-  });
-
-  it("does not require credentials for a provider family that is not active", () => {
-    const config = loadConfig({
-      EXTRACTION_MODELS: "gemini-1.5-pro",
-      GEMINI_API_KEY: "gemini-key",
-      GEMINI_MODEL_NAME: "gemini-1.5-pro",
-      DATABASE_URL: baseEnv.DATABASE_URL,
-    });
-
-    expect(config.azureOpenAI).toBeNull();
+    expect(config.llmModels).toEqual([azurePrimary, azureSecondary]);
+    expect(config.extractionModelIds).toEqual(["azure-primary", "azure-secondary"]);
   });
 });

@@ -6,21 +6,19 @@ export interface LLMProviderLogger {
 }
 
 export interface LLMProviderFactory {
-  /** Example ids, used only for warning/error messages — matching is done via `supports()`. */
-  readonly supportedModelIds: readonly string[];
+  /** Provider discriminator (e.g. "azure"), used only for warning/error messages. */
+  readonly provider: string;
   /** Whether this factory can build a provider for the given EXTRACTION_MODELS entry. */
-  supports(modelId: string): boolean;
+  supports(modelId: string, config: Config): boolean;
   create(modelId: string, config: Config): LLMVisionProviderPort;
 }
 
 /**
  * Resolves the EXTRACTION_MODELS list (already parsed by config) against the
  * set of registered adapter factories. Runs once at startup (composition
- * root), never per-request. A modelId is just a label picked by whoever
- * configured EXTRACTION_MODELS (e.g. "azure-gpt-5.3-chat") — the actual
- * deployment/model called is whatever AZURE_OPENAI_DEPLOYMENT_NAME or
- * GEMINI_MODEL_NAME say, so any azure- or gemini- prefixed label routes to
- * that one configured deployment.
+ * root), never per-request. A modelId must have a matching entry in
+ * config.llmModels — the entry's `provider` decides which factory builds it,
+ * and its own fields (endpoint/deployment/model/...) decide what gets called.
  */
 export class LLMProviderRegistry {
   static resolve(
@@ -29,14 +27,14 @@ export class LLMProviderRegistry {
     config: Config,
     logger: LLMProviderLogger,
   ): LLMVisionProviderPort[] {
-    const exampleIds = factories.flatMap((f) => f.supportedModelIds);
+    const knownProviders = factories.map((f) => f.provider);
     const providers: LLMVisionProviderPort[] = [];
 
     for (const modelId of requestedModelIds) {
-      const factory = factories.find((f) => f.supports(modelId));
+      const factory = factories.find((f) => f.supports(modelId, config));
       if (!factory) {
         logger.warn(
-          `Unsupported model "${modelId}" in EXTRACTION_MODELS — skipping. Examples of supported ids: ${exampleIds.join(", ")}`,
+          `Unsupported model "${modelId}" in EXTRACTION_MODELS — no matching LLM_MODELS entry found. Known providers: ${knownProviders.join(", ")}`,
         );
         continue;
       }
@@ -45,7 +43,7 @@ export class LLMProviderRegistry {
 
     if (providers.length === 0) {
       throw new Error(
-        `No valid models resolved from EXTRACTION_MODELS. Examples of supported ids: ${exampleIds.join(", ")}`,
+        `No valid models resolved from EXTRACTION_MODELS. Known providers: ${knownProviders.join(", ")}`,
       );
     }
 

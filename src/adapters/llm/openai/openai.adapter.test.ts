@@ -3,28 +3,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const createMock = vi.fn();
 
 vi.mock("openai", () => {
-  class AzureOpenAI {
+  class OpenAI {
     chat = { completions: { create: createMock } };
     constructor(_opts: unknown) {}
   }
-  return { AzureOpenAI };
+  return { OpenAI };
 });
 
-import { AzureOpenAIAdapter, azureOpenAIProviderFactory } from "./azure-openai.adapter";
+import { OpenAIAdapter, openAIProviderFactory } from "./openai.adapter";
 import type { Config } from "../../../config";
 
 const config: Config = {
-  extractionModelIds: ["azure-gpt-4o"],
-  llmModels: [
-    {
-      id: "azure-gpt-4o",
-      provider: "azure",
-      apiKey: "key",
-      endpoint: "https://example.openai.azure.com",
-      apiVersion: "2024-10-21",
-      deployment: "gpt-4o-deployment",
-    },
-  ],
+  extractionModelIds: ["openai-gpt-4o"],
+  llmModels: [{ id: "openai-gpt-4o", provider: "openai", apiKey: "key", model: "gpt-4o" }],
   crosscheckThreshold: 0.9,
   crosscheckNumericTolerance: 0.01,
   maxRetriesPerModel: 2,
@@ -37,46 +28,38 @@ const config: Config = {
   port: 3000,
 };
 
-describe("AzureOpenAIAdapter", () => {
+describe("OpenAIAdapter", () => {
   beforeEach(() => {
     createMock.mockReset();
   });
 
-  it("supports a model id only when LLM_MODELS has a matching provider:\"azure\" entry", () => {
-    expect(azureOpenAIProviderFactory.supports("azure-gpt-4o", config)).toBe(true);
-    expect(azureOpenAIProviderFactory.supports("unknown-id", config)).toBe(false);
-    expect(azureOpenAIProviderFactory.supports("azure-gpt-4o", { ...config, llmModels: [] })).toBe(false);
+  it("supports a model id only when LLM_MODELS has a matching provider:\"openai\" entry", () => {
+    expect(openAIProviderFactory.supports("openai-gpt-4o", config)).toBe(true);
+    expect(openAIProviderFactory.supports("unknown-id", config)).toBe(false);
+    expect(openAIProviderFactory.supports("openai-gpt-4o", { ...config, llmModels: [] })).toBe(false);
   });
 
   it("does not support an id whose LLM_MODELS entry belongs to a different provider", () => {
     const otherProviderConfig: Config = {
       ...config,
-      llmModels: [{ id: "azure-gpt-4o", provider: "openai", apiKey: "key", model: "gpt-4o" }],
-    };
-    expect(azureOpenAIProviderFactory.supports("azure-gpt-4o", otherProviderConfig)).toBe(false);
-  });
-
-  it("resolves two distinct deployments for two different LLM_MODELS entries", () => {
-    const twoModelsConfig: Config = {
-      ...config,
       llmModels: [
-        ...config.llmModels,
-        {
-          id: "azure-gpt4-turbo",
-          provider: "azure",
-          apiKey: "key-2",
-          endpoint: "https://example2.openai.azure.com",
-          apiVersion: "2024-10-21",
-          deployment: "gpt-4-turbo-deployment",
-        },
+        { id: "openai-gpt-4o", provider: "azure", apiKey: "key", endpoint: "https://x.openai.azure.com", apiVersion: "2024-10-21", deployment: "d" },
       ],
     };
+    expect(openAIProviderFactory.supports("openai-gpt-4o", otherProviderConfig)).toBe(false);
+  });
 
-    const first = new AzureOpenAIAdapter("azure-gpt-4o", twoModelsConfig);
-    const second = new AzureOpenAIAdapter("azure-gpt4-turbo", twoModelsConfig);
+  it("resolves two distinct models for two different LLM_MODELS entries", () => {
+    const twoModelsConfig: Config = {
+      ...config,
+      llmModels: [...config.llmModels, { id: "openai-gpt-4o-mini", provider: "openai", apiKey: "key-2", model: "gpt-4o-mini" }],
+    };
 
-    expect(first.modelId).toBe("azure-gpt-4o");
-    expect(second.modelId).toBe("azure-gpt4-turbo");
+    const first = new OpenAIAdapter("openai-gpt-4o", twoModelsConfig);
+    const second = new OpenAIAdapter("openai-gpt-4o-mini", twoModelsConfig);
+
+    expect(first.modelId).toBe("openai-gpt-4o");
+    expect(second.modelId).toBe("openai-gpt-4o-mini");
   });
 
   it("parses the model's JSON content into rawOutput", async () => {
@@ -84,7 +67,7 @@ describe("AzureOpenAIAdapter", () => {
       choices: [{ message: { content: JSON.stringify({ merchant: "Acme", total: 42 }) } }],
     });
 
-    const adapter = new AzureOpenAIAdapter("azure-gpt-4o", config);
+    const adapter = new OpenAIAdapter("openai-gpt-4o", config);
     const result = await adapter.extract({
       imageBase64: "AAA=",
       mimeType: "image/png",
@@ -93,17 +76,17 @@ describe("AzureOpenAIAdapter", () => {
       fieldHints: { total: "importe total" },
     });
 
-    expect(result.modelId).toBe("azure-gpt-4o");
+    expect(result.modelId).toBe("openai-gpt-4o");
     expect(result.rawOutput).toEqual({ merchant: "Acme", total: 42 });
     expect(createMock).toHaveBeenCalledTimes(1);
     const callArgs = createMock.mock.calls[0]![0];
-    expect(callArgs.model).toBe("gpt-4o-deployment");
+    expect(callArgs.model).toBe("gpt-4o");
     expect(callArgs.response_format).toEqual({ type: "json_object" });
   });
 
   it("throws when the model returns no content", async () => {
     createMock.mockResolvedValue({ choices: [{ message: {} }] });
-    const adapter = new AzureOpenAIAdapter("azure-gpt-4o", config);
+    const adapter = new OpenAIAdapter("openai-gpt-4o", config);
 
     await expect(
       adapter.extract({ imageBase64: "AAA=", mimeType: "image/png", documentType: "ticket", jsonSchema: {}, fieldHints: {} }),
@@ -112,7 +95,7 @@ describe("AzureOpenAIAdapter", () => {
 
   it("throws when the model returns non-JSON content", async () => {
     createMock.mockResolvedValue({ choices: [{ message: { content: "not json" } }] });
-    const adapter = new AzureOpenAIAdapter("azure-gpt-4o", config);
+    const adapter = new OpenAIAdapter("openai-gpt-4o", config);
 
     await expect(
       adapter.extract({ imageBase64: "AAA=", mimeType: "image/png", documentType: "ticket", jsonSchema: {}, fieldHints: {} }),

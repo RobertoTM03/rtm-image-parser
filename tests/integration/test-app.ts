@@ -16,8 +16,7 @@ export function getTestDatabaseUrl(): string | undefined {
 
 const testConfig: Omit<Config, "databaseUrl"> = {
   extractionModelIds: ["fake-model"],
-  azureOpenAI: null,
-  gemini: null,
+  llmModels: [],
   crosscheckThreshold: 0.9,
   crosscheckNumericTolerance: 0.01,
   maxRetriesPerModel: 1,

@@ -1,15 +1,67 @@
 import { z } from "zod";
 
+const azureModelSchema = z.object({
+  id: z.string().min(1),
+  provider: z.literal("azure"),
+  apiKey: z.string().min(1),
+  endpoint: z.string().min(1),
+  apiVersion: z.string().min(1),
+  deployment: z.string().min(1),
+});
+
+const openaiModelSchema = z.object({
+  id: z.string().min(1),
+  provider: z.literal("openai"),
+  apiKey: z.string().min(1),
+  model: z.string().min(1),
+});
+
+const geminiModelSchema = z.object({
+  id: z.string().min(1),
+  provider: z.literal("gemini"),
+  apiKey: z.string().min(1),
+  model: z.string().min(1),
+});
+
+const llmModelSchema = z.discriminatedUnion("provider", [azureModelSchema, openaiModelSchema, geminiModelSchema]);
+const llmModelsArraySchema = z.array(llmModelSchema).superRefine((models, ctx) => {
+  const seen = new Set<string>();
+  for (const model of models) {
+    if (seen.has(model.id)) {
+      ctx.addIssue({ code: "custom", message: `Duplicate LLM_MODELS id "${model.id}"` });
+    }
+    seen.add(model.id);
+  }
+});
+
+export type LLMModelConfig = z.infer<typeof llmModelSchema>;
+
+/**
+ * LLM_MODELS is a JSON array (see .env.example for the shape/comments) —
+ * one self-contained connection per entry, each with its own credentials.
+ */
+const llmModelsEnvSchema = z.string().transform((value, ctx) => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    ctx.addIssue({ code: "custom", message: "LLM_MODELS must be valid JSON (a single-line array of model objects)" });
+    return z.NEVER;
+  }
+
+  const result = llmModelsArraySchema.safeParse(parsed);
+  if (!result.success) {
+    const details = result.error.issues.map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`).join("; ");
+    ctx.addIssue({ code: "custom", message: `LLM_MODELS is invalid: ${details}` });
+    return z.NEVER;
+  }
+
+  return result.data;
+});
+
 const rawEnvSchema = z.object({
   EXTRACTION_MODELS: z.string().min(1, "EXTRACTION_MODELS must list at least one model id"),
-
-  AZURE_OPENAI_API_KEY: z.string().optional(),
-  AZURE_OPENAI_ENDPOINT: z.string().optional(),
-  AZURE_OPENAI_API_VERSION: z.string().optional(),
-  AZURE_OPENAI_DEPLOYMENT_NAME: z.string().optional(),
-
-  GEMINI_API_KEY: z.string().optional(),
-  GEMINI_MODEL_NAME: z.string().optional(),
+  LLM_MODELS: llmModelsEnvSchema,
 
   CROSSCHECK_THRESHOLD: z.coerce.number().min(0).max(1).default(0.9),
   CROSSCHECK_NUMERIC_TOLERANCE: z.coerce.number().min(0).default(0.01),
@@ -34,57 +86,6 @@ const rawEnvSchema = z.object({
   PORT: z.coerce.number().int().positive().default(3000),
 });
 
-const AZURE_REQUIRED_KEYS = [
-  "AZURE_OPENAI_API_KEY",
-  "AZURE_OPENAI_ENDPOINT",
-  "AZURE_OPENAI_API_VERSION",
-  "AZURE_OPENAI_DEPLOYMENT_NAME",
-] as const;
-
-const GEMINI_REQUIRED_KEYS = ["GEMINI_API_KEY", "GEMINI_MODEL_NAME"] as const;
-
-function splitModelIds(value: string): string[] {
-  return value
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
-}
-
-/**
- * Cross-field validation: EXTRACTION_MODELS drives which provider credentials
- * are actually required. Model-name *support* (recognized by an adapter) is
- * validated later by LLMProviderRegistry, since config has no knowledge of
- * which adapters exist.
- */
-export const envSchema = rawEnvSchema.superRefine((env, ctx) => {
-  const modelIds = splitModelIds(env.EXTRACTION_MODELS);
-
-  const needsAzure = modelIds.some((id) => id.startsWith("azure-"));
-  const needsGemini = modelIds.some((id) => id.startsWith("gemini-"));
-
-  if (needsAzure) {
-    for (const key of AZURE_REQUIRED_KEYS) {
-      if (!env[key]) {
-        ctx.addIssue({
-          code: "custom",
-          path: [key],
-          message: `${key} is required because EXTRACTION_MODELS includes an azure-* model`,
-        });
-      }
-    }
-  }
-
-  if (needsGemini) {
-    for (const key of GEMINI_REQUIRED_KEYS) {
-      if (!env[key]) {
-        ctx.addIssue({
-          code: "custom",
-          path: [key],
-          message: `${key} is required because EXTRACTION_MODELS includes a gemini-* model`,
-        });
-      }
-    }
-  }
-});
+export const envSchema = rawEnvSchema;
 
 export type RawEnv = z.infer<typeof rawEnvSchema>;

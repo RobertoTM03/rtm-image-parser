@@ -6,10 +6,13 @@ import type {
   LLMVisionProviderPort,
 } from "../../../domain/ports/llm-vision-provider.port";
 import type { LLMProviderFactory } from "../../../domain/services/llm-provider-registry";
-import type { Config } from "../../../config";
+import type { Config, LLMModelConfig } from "../../../config";
 
-// Example EXTRACTION_MODELS labels — actual support is any "gemini-*" prefix (see supports() below).
-export const GEMINI_SUPPORTED_MODELS = ["gemini-1.5-pro", "gemini-1.5-flash"] as const;
+type GeminiModelConfig = Extract<LLMModelConfig, { provider: "gemini" }>;
+
+function findEntry(modelId: string, config: Config): GeminiModelConfig | undefined {
+  return config.llmModels.find((m): m is GeminiModelConfig => m.id === modelId && m.provider === "gemini");
+}
 
 function buildPrompt(request: LLMVisionExtractionRequest): string {
   const hints = Object.entries(request.fieldHints)
@@ -34,14 +37,15 @@ export class GeminiAdapter implements LLMVisionProviderPort {
     public readonly modelId: string,
     config: Config,
   ) {
-    if (!config.gemini) {
-      throw new Error(`GeminiAdapter requires config.gemini (model "${modelId}")`);
+    const entry = findEntry(modelId, config);
+    if (!entry) {
+      throw new Error(`GeminiAdapter: no LLM_MODELS entry for "${modelId}" with provider "gemini"`);
     }
 
     this.timeoutMs = config.llmRequestTimeoutMs;
-    const client = new GoogleGenerativeAI(config.gemini.apiKey);
+    const client = new GoogleGenerativeAI(entry.apiKey);
     this.model = client.getGenerativeModel({
-      model: config.gemini.modelName,
+      model: entry.model,
       generationConfig: { responseMimeType: "application/json" },
     });
   }
@@ -81,7 +85,7 @@ export class GeminiAdapter implements LLMVisionProviderPort {
 }
 
 export const geminiProviderFactory: LLMProviderFactory = {
-  supportedModelIds: GEMINI_SUPPORTED_MODELS,
-  supports: (modelId) => modelId.startsWith("gemini-"),
+  provider: "gemini",
+  supports: (modelId, config) => findEntry(modelId, config) !== undefined,
   create: (modelId, config) => new GeminiAdapter(modelId, config),
 };

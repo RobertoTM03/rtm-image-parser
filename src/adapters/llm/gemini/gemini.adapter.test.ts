@@ -12,19 +12,20 @@ vi.mock("@google/generative-ai", () => {
   return { GoogleGenerativeAI };
 });
 
-import { GeminiAdapter, geminiProviderFactory, GEMINI_SUPPORTED_MODELS } from "./gemini.adapter";
+import { GeminiAdapter, geminiProviderFactory } from "./gemini.adapter";
 import type { Config } from "../../../config";
 
 const config: Config = {
   extractionModelIds: ["gemini-1.5-pro"],
-  azureOpenAI: null,
-  gemini: { apiKey: "key", modelName: "gemini-1.5-pro" },
+  llmModels: [{ id: "gemini-1.5-pro", provider: "gemini", apiKey: "key", model: "gemini-1.5-pro" }],
   crosscheckThreshold: 0.9,
   crosscheckNumericTolerance: 0.01,
   maxRetriesPerModel: 2,
   llmRequestTimeoutMs: 30000,
   maxImageSizeBytes: 10 * 1024 * 1024,
   allowedMimeTypes: ["image/jpeg"],
+  cacheEnabled: true,
+  maxHistoryPageSize: 50,
   databaseUrl: "postgresql://x",
   port: 3000,
 };
@@ -34,14 +35,31 @@ describe("GeminiAdapter", () => {
     generateContentMock.mockReset();
   });
 
-  it("declares gemini-1.5-pro as an example supported id", () => {
-    expect(GEMINI_SUPPORTED_MODELS).toContain("gemini-1.5-pro");
+  it("supports a model id only when LLM_MODELS has a matching provider:\"gemini\" entry", () => {
+    expect(geminiProviderFactory.supports("gemini-1.5-pro", config)).toBe(true);
+    expect(geminiProviderFactory.supports("unknown-id", config)).toBe(false);
+    expect(geminiProviderFactory.supports("gemini-1.5-pro", { ...config, llmModels: [] })).toBe(false);
   });
 
-  it("supports any gemini-* labeled model id, not just the example ones", () => {
-    expect(geminiProviderFactory.supports("gemini-1.5-pro")).toBe(true);
-    expect(geminiProviderFactory.supports("gemini-2.0-flash")).toBe(true);
-    expect(geminiProviderFactory.supports("azure-gpt-4o")).toBe(false);
+  it("does not support an id whose LLM_MODELS entry belongs to a different provider", () => {
+    const otherProviderConfig: Config = {
+      ...config,
+      llmModels: [{ id: "gemini-1.5-pro", provider: "openai", apiKey: "key", model: "gpt-4o" }],
+    };
+    expect(geminiProviderFactory.supports("gemini-1.5-pro", otherProviderConfig)).toBe(false);
+  });
+
+  it("resolves two distinct models for two different LLM_MODELS entries", () => {
+    const twoModelsConfig: Config = {
+      ...config,
+      llmModels: [...config.llmModels, { id: "gemini-1.5-flash", provider: "gemini", apiKey: "key-2", model: "gemini-1.5-flash" }],
+    };
+
+    const first = new GeminiAdapter("gemini-1.5-pro", twoModelsConfig);
+    const second = new GeminiAdapter("gemini-1.5-flash", twoModelsConfig);
+
+    expect(first.modelId).toBe("gemini-1.5-pro");
+    expect(second.modelId).toBe("gemini-1.5-flash");
   });
 
   it("parses the model's JSON text into rawOutput", async () => {
